@@ -1,0 +1,182 @@
+{
+    "id": 4674235,
+    "created_at": "2024-03-22T22:54:50.524-04:00",
+    "updated_at": "2024-03-23T18:20:21.259-04:00",
+    "file": {
+        "width": 1920,
+        "height": 960,
+        "ext": "webm",
+        "size": 19015761,
+        "md5": "ea50a0e6ff66ca1c3fc12351c8e6bfc7",
+        "url": "https://static1.e621.net/data/ea/50/ea50a0e6ff66ca1c3fc12351c8e6bfc7.webm"
+    },
+    "preview": {
+        "width": 150,
+        "height": 75,
+        "url": "https://static1.e621.net/data/preview/ea/50/ea50a0e6ff66ca1c3fc12351c8e6bfc7.jpg"
+    },
+    "sample": {
+        "has": true,
+        "height": 425,
+        "width": 850,
+        "url": "https://static1.e621.net/data/sample/ea/50/ea50a0e6ff66ca1c3fc12351c8e6bfc7.jpg",
+        "alternates": {
+            "720p": {
+                "type": "video",
+                "height": 640,
+                "width": 1280,
+                "urls": [
+                    "https://static1.e621.net/data/sample/ea/50/ea50a0e6ff66ca1c3fc12351c8e6bfc7_720p.webm",
+                    "https://static1.e621.net/data/sample/ea/50/ea50a0e6ff66ca1c3fc12351c8e6bfc7_720p.mp4"
+                ]
+            },
+            "480p": {
+                "type": "video",
+                "height": 320,
+                "width": 640,
+                "urls": [
+                    "https://static1.e621.net/data/sample/ea/50/ea50a0e6ff66ca1c3fc12351c8e6bfc7_480p.webm",
+                    "https://static1.e621.net/data/sample/ea/50/ea50a0e6ff66ca1c3fc12351c8e6bfc7_480p.mp4"
+                ]
+            },
+            "original": {
+                "type": "video",
+                "height": 960,
+                "width": 1920,
+                "urls": [
+                    null,
+                    "https://static1.e621.net/data/ea/50/ea50a0e6ff66ca1c3fc12351c8e6bfc7.mp4"
+                ]
+            }
+        }
+    },
+    "score": {
+        "up": 973,
+        "down": -8,
+        "total": 965
+    },
+    "tags": {
+        "general": [
+            "4_toes",
+            "anthro",
+            "anthro_penetrated",
+            "areola",
+            "big_breasts",
+            "blue_eyes",
+            "bouncing_breasts",
+            "breasts",
+            "butt",
+            "claws",
+            "clothing",
+            "digitigrade",
+            "duo",
+            "eye_roll",
+            "feet",
+            "female",
+            "female_on_human",
+            "first_person_view",
+            "from_front_position",
+            "fur",
+            "genitals",
+            "grabbing_sheets",
+            "hat",
+            "headgear",
+            "headwear",
+            "human_on_anthro",
+            "human_penetrating",
+            "human_penetrating_anthro",
+            "interspecies",
+            "looking_pleasured",
+            "lying",
+            "male",
+            "male/female",
+            "missionary_position",
+            "nipples",
+            "nude",
+            "on_back",
+            "open_mouth",
+            "palphilia",
+            "pawpads",
+            "paws",
+            "penetration",
+            "penis",
+            "pink_areola",
+            "pink_nipples",
+            "pink_pawpads",
+            "pink_pussy",
+            "pussy",
+            "sex",
+            "smile",
+            "spread_legs",
+            "spreading",
+            "tail",
+            "thick_thighs",
+            "toe_claws",
+            "toes",
+            "vaginal",
+            "vaginal_penetration",
+            "white_body",
+            "wide_hips",
+            "witch_hat"
+        ],
+        "artist": [
+            "furromantic"
+        ],
+        "copyright": [
+            "palworld",
+            "pocketpair"
+        ],
+        "character": [],
+        "species": [
+            "canid",
+            "canine",
+            "fox",
+            "human",
+            "mammal",
+            "pal_(species)",
+            "wixen"
+        ],
+        "invalid": [],
+        "meta": [
+            "2024",
+            "2:1",
+            "3d_(artwork)",
+            "3d_animation",
+            "animated",
+            "digital_media_(artwork)",
+            "hi_res",
+            "short_playtime",
+            "sound",
+            "webm",
+            "widescreen"
+        ],
+        "lore": []
+    },
+    "locked_tags": [],
+    "change_seq": 56961655,
+    "flags": {
+        "pending": false,
+        "flagged": false,
+        "note_locked": false,
+        "status_locked": false,
+        "rating_locked": false,
+        "deleted": false
+    },
+    "rating": "e",
+    "fav_count": 1764,
+    "sources": [],
+    "pools": [],
+    "relationships": {
+        "parent_id": null,
+        "has_children": false,
+        "has_active_children": false,
+        "children": []
+    },
+    "approver_id": 147515,
+    "uploader_id": 323971,
+    "description": "Good news! The Wixen at the base wants to cook every day! I think that as her trainer you should help her with whatever she needs! \ud83e\udd70\r\nGet the 3D model and 4K VR animation on \"Patreon\":https://www.patreon.com/Furromantic and \"SubscribeStar!\":https://subscribestar.adult/furromantic\r\nFollow me on \"X!\":https://twitter.com/furromantic\r\nSpecial thanks to all my Patrons! \ud83d\udc97",
+    "comment_count": 12,
+    "is_favorited": false,
+    "has_notes": false,
+    "duration": 15.0
+}

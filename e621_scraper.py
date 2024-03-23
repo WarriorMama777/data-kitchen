@@ -2,7 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 
 # 検索ワード
-search_query = "東方Project"
+search_query = "palworld"
 
 # URL
 base_url = "https://e621.net/post/index.json"
@@ -13,7 +13,9 @@ params = {
 
 # リクエスト
 response = requests.get(base_url, params=params)
-data = response.json()
+text_data = response.text
+# 正規表現や文字列操作で必要な情報を抽出
+
 
 # 画像とメタデータの保存
 for post in data["posts"]:

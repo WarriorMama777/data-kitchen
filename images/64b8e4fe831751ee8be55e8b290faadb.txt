@@ -1,0 +1,109 @@
+{
+    "id": 4675343,
+    "created_at": "2024-03-23T15:02:03.100-04:00",
+    "updated_at": "2024-03-23T18:14:25.816-04:00",
+    "file": {
+        "width": 2586,
+        "height": 2160,
+        "ext": "png",
+        "size": 8489056,
+        "md5": "64b8e4fe831751ee8be55e8b290faadb",
+        "url": "https://static1.e621.net/data/64/b8/64b8e4fe831751ee8be55e8b290faadb.png"
+    },
+    "preview": {
+        "width": 150,
+        "height": 125,
+        "url": "https://static1.e621.net/data/preview/64/b8/64b8e4fe831751ee8be55e8b290faadb.jpg"
+    },
+    "sample": {
+        "has": true,
+        "height": 709,
+        "width": 850,
+        "url": "https://static1.e621.net/data/sample/64/b8/64b8e4fe831751ee8be55e8b290faadb.jpg",
+        "alternates": {}
+    },
+    "score": {
+        "up": 21,
+        "down": 0,
+        "total": 21
+    },
+    "tags": {
+        "general": [
+            "anthro",
+            "areola",
+            "belly",
+            "big_breasts",
+            "big_butt",
+            "breasts",
+            "butt",
+            "claws",
+            "female",
+            "forest",
+            "grass",
+            "nipples",
+            "nude",
+            "pink_areola",
+            "pink_nipples",
+            "plant",
+            "revamped_anthros",
+            "sitting",
+            "slightly_chubby",
+            "slightly_chubby_anthro",
+            "slightly_chubby_female",
+            "smile",
+            "solo",
+            "tail",
+            "thick_thighs",
+            "tree"
+        ],
+        "artist": [
+            "lostworkszx"
+        ],
+        "copyright": [
+            "palworld",
+            "pocketpair",
+            "source_filmmaker"
+        ],
+        "character": [],
+        "species": [
+            "dinossom",
+            "pal_(species)"
+        ],
+        "invalid": [
+            "chub_(disambiguation)"
+        ],
+        "meta": [
+            "3d_(artwork)",
+            "digital_media_(artwork)",
+            "hi_res"
+        ],
+        "lore": []
+    },
+    "locked_tags": [],
+    "change_seq": 56933746,
+    "flags": {
+        "pending": true,
+        "flagged": false,
+        "note_locked": false,
+        "status_locked": false,
+        "rating_locked": false,
+        "deleted": false
+    },
+    "rating": "q",
+    "fav_count": 33,
+    "sources": [],
+    "pools": [],
+    "relationships": {
+        "parent_id": null,
+        "has_children": false,
+        "has_active_children": false,
+        "children": []
+    },
+    "approver_id": null,
+    "uploader_id": 755706,
+    "description": "Model By DonglySFM",
+    "comment_count": 0,
+    "is_favorited": false,
+    "has_notes": false,
+    "duration": null
+}
