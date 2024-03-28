@@ -86,6 +86,10 @@ def main(args):
     try:
         posts = list(get_posts(args.tags, args.url, login_info, args.page_limit, args.year_start, args.year_end))
         for post in tqdm(posts, desc="Processing posts", unit="post"):
+            if 'file_url' not in post:  # 追加した確認処理
+                print(f"Skipping post {post['id']} due to missing 'file_url'")
+                continue
+
             file_url = post['file_url']
             file_ext = os.path.splitext(file_url)[1].lower()
             if all_extensions or file_ext in extensions:
