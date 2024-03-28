@@ -31,7 +31,7 @@ def is_within_year_range(date_str, year_start, year_end):
 
 def get_posts(tags, url, login_info=None, page_limit=1000, year_start=None, year_end=None):
     print(f"Downloading posts for tags: {tags}...")
-    for i in tqdm(range(1, page_limit+1), desc="Downloading", unit="page"):
+    for i in tqdm(range(1, page_limit+1), desc="Analyzing", unit="page"):
         params = {
             "tags": tags,
             "page": i
@@ -50,10 +50,14 @@ def get_posts(tags, url, login_info=None, page_limit=1000, year_start=None, year
             yield post
 
 def download_image(url, path):
-    response = requests.get(url)
-    with open(path, 'wb') as file:
-        file.write(response.content)
-
+    try:
+        response = requests.get(url)
+        # Ensure the request was successful; otherwise, raise an exception
+        response.raise_for_status()
+        with open(path, 'wb') as file:
+            file.write(response.content)
+    except Exception as e:
+        print(f"Error downloading {url}: {e}")
 def save_metadata(post, path):
     with open(path, 'w', encoding='utf-8') as file:
         json.dump(post, file, ensure_ascii=False, indent=4)
