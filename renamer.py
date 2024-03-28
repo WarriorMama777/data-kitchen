@@ -1,5 +1,6 @@
 import argparse
 import os
+import re  # 正規表現モジュールをインポート
 
 def rename_files(args):
     directory = args.dir
@@ -62,6 +63,21 @@ def rename_files(args):
             if pos != -1:
                 new_name = new_name[:pos] + add_str + new_name[pos:]
 
+        # --reg_delの処理
+        if args.reg_del:
+            pattern = re.compile(args.reg_del)
+            new_name = pattern.sub('', new_name)
+
+        # --reg_del_aroundの処理
+        if args.reg_del_around:
+            pattern = re.compile(args.reg_del_around)
+            match = pattern.search(new_name)
+            if match:
+                new_name = new_name[match.start():match.end()]
+            else:
+                # マッチしなかった場合はファイル名を変更しない
+                new_name = filename
+
         if new_name != filename:
             old_path = os.path.join(directory, filename)
             new_path = os.path.join(directory, new_name)
@@ -86,6 +102,8 @@ if __name__ == "__main__":
     parser.add_argument("--del_before", type=str, help="指定した文字以前を削除")
     parser.add_argument("--add_after", type=str, help="指定した文字の後ろに文字を追加 (形式: '検索文字列,追加文字列')")
     parser.add_argument("--add_before", type=str, help="指定した文字の前に文字を追加 (形式: '検索文字列,追加文字列')")
+    parser.add_argument("--reg_del", type=str, help="正規表現でマッチした箇所を削除")
+    parser.add_argument("--reg_del_around", type=str, help="正規表現でマッチした箇所以外を削除")
 
 
     args = parser.parse_args()
