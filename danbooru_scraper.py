@@ -2,7 +2,6 @@ from argparse import ArgumentParser
 from pathlib import Path
 import requests
 import os
-import re
 import json
 from datetime import datetime
 from tqdm import tqdm
@@ -31,7 +30,6 @@ def is_within_year_range(date_str, year_start, year_end):
     return True
 
 def get_posts(tags, url, login_info=None, page_limit=1000, year_start=None, year_end=None):
-    # ダウンロード開始時に表示するメッセージを追加
     print(f"Downloading posts for tags: {tags}...")
     for i in tqdm(range(1, page_limit+1), desc="Downloading", unit="page"):
         params = {
@@ -51,19 +49,14 @@ def get_posts(tags, url, login_info=None, page_limit=1000, year_start=None, year
                 continue
             yield post
 
-# その他の関数は変更なしで、get_posts関数の呼び出しを含むmain関数の部分を適切に修正
-# 他の部分は変更なし
-
-
 def download_image(url, path):
     response = requests.get(url)
     with open(path, 'wb') as file:
         file.write(response.content)
 
-def save_tags(post, path):
-    tags = post['tag_string']
+def save_metadata(post, path):
     with open(path, 'w', encoding='utf-8') as file:
-        file.write(tags)
+        json.dump(post, file, ensure_ascii=False, indent=4)
 
 def main(args):
     os.makedirs(args.output, exist_ok=True)
@@ -100,23 +93,20 @@ def main(args):
                     i += 1
                     print(f"Downloaded {file_name}")
 
-                if args.save_tags:
-                    tags_path = f"{os.path.splitext(file_path)[0]}.txt"
-                    save_tags(post, tags_path)
-                    j += 1
-                    print(f"Saved tags for {file_name}")
+                metadata_path = f"{os.path.splitext(file_path)[0]}.txt"
+                save_metadata(post, metadata_path)
+                j += 1
+                print(f"Saved metadata for {file_name}")
 
     except KeyboardInterrupt:
         pass
 
     if not args.tags_only:
         print(f"Scraped {i} files")
-    if args.save_tags:
-        print(f"Saved {j} tag files")
+    print(f"Saved {j} metadata files")
 
 if __name__ == "__main__":
     try:
         main(parser.parse_args())
     except Exception as e:
         print(e)
-
