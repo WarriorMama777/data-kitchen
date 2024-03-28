@@ -3,15 +3,24 @@ import json
 import os
 
 def format_metadata(directory_path):
+    total_files = 0
+    processed_files = 0
+    skipped_files = 0
+
+    print(f"Processing directory: {directory_path}")
+    
     for filename in os.listdir(directory_path):
         if filename.endswith(".txt"):
+            total_files += 1
             file_path = os.path.join(directory_path, filename)
+            print(f"Processing file: {filename}")
 
             with open(file_path, 'r', encoding='utf-8') as file:
                 try:
                     data = json.loads(file.read())
                 except json.JSONDecodeError:
                     print(f"Skipping {filename}: not a valid JSON.")
+                    skipped_files += 1
                     continue
 
             # 各タグカテゴリのデータを抽出し、カンマ区切りの文字列に変換
@@ -39,6 +48,11 @@ def format_metadata(directory_path):
             # 結果を同じファイルに上書き保存
             with open(file_path, 'w', encoding='utf-8') as file:
                 file.write(formatted_string)
+
+            print(f"Successfully processed: {filename}")
+            processed_files += 1
+
+    print(f"Processing completed. Total files: {total_files}, Processed: {processed_files}, Skipped: {skipped_files}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Format metadata from .txt files within a directory and save them.")
