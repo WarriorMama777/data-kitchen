@@ -5,7 +5,6 @@ import os
 import re
 import json
 from datetime import datetime
-# tqdmライブラリをインポート
 from tqdm import tqdm
 
 parser = ArgumentParser(description="Scrape content from danbooru based on tag search.")
@@ -32,7 +31,9 @@ def is_within_year_range(date_str, year_start, year_end):
     return True
 
 def get_posts(tags, url, login_info=None, page_limit=1000, year_start=None, year_end=None):
-    for i in range(1, page_limit+1):
+    # ダウンロード開始時に表示するメッセージを追加
+    print(f"Downloading posts for tags: {tags}...")
+    for i in tqdm(range(1, page_limit+1), desc="Downloading", unit="page"):
         params = {
             "tags": tags,
             "page": i
@@ -86,7 +87,8 @@ def main(args):
     i = 0
     j = 0
     try:
-        for post in get_posts(args.tags, args.url, login_info, args.page_limit, args.year_start, args.year_end):
+        posts = list(get_posts(args.tags, args.url, login_info, args.page_limit, args.year_start, args.year_end))
+        for post in tqdm(posts, desc="Processing posts", unit="post"):
             file_url = post['file_url']
             file_ext = os.path.splitext(file_url)[1].lower()
             if all_extensions or file_ext in extensions:
