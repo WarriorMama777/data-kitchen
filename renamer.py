@@ -3,17 +3,23 @@ import os
 import re  # 正規表現モジュールをインポート
 
 def rename_files(args):
+    # 引数がdir以外に指定されていないかチェック
+    if all(value is None for key, value in vars(args).items() if key != "dir"):
+        print("警告: どのオプションも指定されていません。ファイル名は変更されません。")
+        return
+    
     directory = args.dir
     if not os.path.isdir(directory):
         print(f"指定されたディレクトリが存在しません: {directory}")
         return
-
     files = os.listdir(directory)
     file_count = len(files)
     num_length = len(str(file_count))
 
     for i, filename in enumerate(files, start=1):
-        new_name = filename
+        # 拡張子を取得し、ファイル名から拡張子を除く
+        base_name, extension = os.path.splitext(filename)
+        new_name = base_name
 
         if args.del_first:
             new_name = new_name[args.del_first:]
@@ -77,6 +83,9 @@ def rename_files(args):
             else:
                 # マッチしなかった場合はファイル名を変更しない
                 new_name = filename
+
+        # 最後に拡張子を再度付加
+        new_name += extension
 
         if new_name != filename:
             old_path = os.path.join(directory, filename)
