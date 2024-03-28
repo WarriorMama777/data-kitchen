@@ -6,11 +6,14 @@ def format_metadata(directory_path):
     total_files = 0
     processed_files = 0
     skipped_files = 0
+    # 処理対象のファイル拡張子リスト
+    target_extensions = ['.txt', '.json']
 
     print(f"Processing directory: {directory_path}")
     
     for filename in os.listdir(directory_path):
-        if filename.endswith(".txt"):
+        # 処理対象のファイル拡張子かどうかをチェック
+        if any(filename.endswith(ext) for ext in target_extensions):
             total_files += 1
             file_path = os.path.join(directory_path, filename)
             print(f"Processing file: {filename}")
@@ -55,8 +58,8 @@ def format_metadata(directory_path):
     print(f"Processing completed. Total files: {total_files}, Processed: {processed_files}, Skipped: {skipped_files}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Format metadata from .txt files within a directory and save them.")
-    parser.add_argument("--directory", type=str, default="./", help="Path to the directory containing .txt files")
+    parser = argparse.ArgumentParser(description="Format metadata from files within a directory and save them.")
+    parser.add_argument("--directory", type=str, default="./", help="Path to the directory containing files")
 
     args = parser.parse_args()
 
