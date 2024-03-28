@@ -20,12 +20,18 @@ def format_metadata(directory_path):
             tag_string_general = data.get('tag_string_general', '').replace(' ', ',')
             tag_string_meta = data.get('tag_string_meta', '').replace(' ', ',')
             tag_string_artist = data.get('tag_string_artist', '').replace(' ', ',')
-            
+
             # レーティングの整形
             rating = "rating_" + data.get('rating', '')
 
-            # 全部を一つの文字列に結合
-            formatted_string = f"{tag_string_copyright},{tag_string_character},{tag_string_general},{tag_string_meta},{rating},{tag_string_artist}"
+            # 全部を一つの文字列に結合する前に空の文字列を除外
+            tags_and_rating = [tag_string for tag_string in [
+                tag_string_copyright, tag_string_character, tag_string_general,
+                tag_string_meta, rating, tag_string_artist
+            ] if tag_string]
+
+            # 空でない文字列をカンマで結合
+            formatted_string = ",".join(tags_and_rating)
 
             # 先頭と末尾の不要なカンマを削除
             formatted_string = formatted_string.strip(',')
