@@ -48,7 +48,7 @@ def main(args):
             if image_key not in metadata:
                 metadata[image_key] = {}
             
-            metadata[image_key]['tags'] = tags
+            metadata[image_key]['caption'] = tags
             if args.debug:
                 logger.info(f"{image_key} {tags}")
     
