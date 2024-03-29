@@ -1,6 +1,7 @@
 import argparse
 import os
 import re  # 正規表現モジュールをインポート
+import sys
 
 def rename_files(args):
     # 引数がdir以外に指定されていないかチェック
@@ -90,6 +91,7 @@ def rename_files(args):
         if new_name != filename:
             old_path = os.path.join(directory, filename)
             new_path = os.path.join(directory, new_name)
+
             try:
                 os.rename(old_path, new_path)
             except Exception as e:
