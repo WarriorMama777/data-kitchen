@@ -14,9 +14,25 @@ def glob_images_pathlib(directory, recursive):
     else:
         return list(directory.glob('*.*'))
 
+def choose_key():
+    print("メタデータに保存しようとしているファイルを選択 / Select the file you want to save to metadata.:")
+    print("1: tags")
+    print("2: caption")
+    choice = input("選択肢（1または2）を入力してEnterを押してください / Please enter your choice (1 or 2) and press Enter: ")
+    if choice == '1':
+        return 'tags'
+    elif choice == '2':
+        return 'caption'
+    else:
+        print("無効な入力です。'tags'をデフォルトとして使用します。 / Invalid input. Use 'tags' as default")
+        return 'tags'
+
 def main(args):
     assert not args.recursive or (args.recursive and args.full_path), "recursive requires full_path / recursiveはfull_pathと同時に指定してください"
-    
+
+    # ユーザーにキーを選択させる
+    chosen_key = choose_key()
+
     train_data_dir_path = Path(args.train_data_dir)
     image_paths = glob_images_pathlib(train_data_dir_path, args.recursive)
     logger.info(f"found {len(image_paths)} images.")
@@ -48,7 +64,8 @@ def main(args):
             if image_key not in metadata:
                 metadata[image_key] = {}
             
-            metadata[image_key]['caption'] = tags
+            # ユーザーが選択したキーを使用してメタデータに追加
+            metadata[image_key][chosen_key] = tags
             if args.debug:
                 logger.info(f"{image_key} {tags}")
     
