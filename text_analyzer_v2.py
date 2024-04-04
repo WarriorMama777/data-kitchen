@@ -24,7 +24,7 @@ def analyze_metadata(dir_path, save_path, metadata_label, append_labels=[]):
                 print(f"Skipping invalid JSON file: {file_path}")
 
     for result in results.values():
-        result["score"] = ", ".join(result["score"])
+        result["score"] = ", ".join(map(str, result["score"]))
         for label in append_labels:
             result[label] = ", ".join(set(result[label]))
 
