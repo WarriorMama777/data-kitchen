@@ -4,7 +4,8 @@ from pathlib import Path
 from collections import defaultdict
 
 def analyze_metadata(dir_path, save_path, metadata_label, append_labels=[]):
-    results = defaultdict(lambda: {"count": 0, "score": [], **{label: [] for label in append_labels}})
+    # "score"をデフォルトのキーから削除し、append_labelsに基づいてキーを追加
+    results = defaultdict(lambda: {"count": 0, **{label: [] for label in append_labels}})
     total_files = 0  # 解析されたファイルの総数をカウントするための変数を追加
     
     for file_path in Path(dir_path).glob('**/*'):
@@ -20,7 +21,6 @@ def analyze_metadata(dir_path, save_path, metadata_label, append_labels=[]):
                 label_value = metadata.get(metadata_label, None)
                 if label_value:
                     results[label_value]["count"] += 1
-                    results[label_value]["score"].append(str(metadata.get("score", "")))
                     for label in append_labels:
                         if metadata.get(label):
                             results[label_value][label].append(metadata[label])
@@ -28,9 +28,11 @@ def analyze_metadata(dir_path, save_path, metadata_label, append_labels=[]):
                 print(f"Skipping invalid JSON file: {file_path}")
 
     for result in results.values():
-        result["score"] = ", ".join(map(str, result["score"]))
         for label in append_labels:
-            result[label] = ", ".join(set(str(item) for item in result[label]))
+            if label == "score":
+                result[label] = ", ".join(map(str, result[label]))
+            else:
+                result[label] = ", ".join(set(str(item) for item in result[label]))
 
     print(f"Analysis complete. Total files analyzed: {total_files}")  # 解析完了と総ファイル数を表示
 
