@@ -34,7 +34,16 @@ def analyze_metadata(dir_path, save_path, metadata_label, count=False, metadata_
         final_results[artist]['count'] = str(sum(data['count']))
         for key, values in data.items():
             if key != 'count':
-                final_results[artist][key] = ", ".join(map(str, set(values)))
+                if isinstance(values, list):
+                    # リスト内の要素をフラットにするため、拡張されたリスト理解を使用
+                    flat_list = [item for sublist in values for item in (sublist if isinstance(sublist, list) else [sublist])]
+                    # ユニークな要素のみを保持
+                    unique_items = set(flat_list)
+                    # 最終的な文字列の生成
+                    final_results[artist][key] = ", ".join(map(str, unique_items))
+                else:
+                    # valuesがリストでない場合、単一の要素として扱う
+                    final_results[artist][key] = str(values)
 
     # 結果を保存
     save_file_path = os.path.join(save_path, 'analysis_result.txt')
