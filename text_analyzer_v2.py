@@ -4,53 +4,44 @@ from pathlib import Path
 from collections import defaultdict
 
 def analyze_metadata(dir_path, save_path, metadata_label, append_labels=[]):
+    # "score"をデフォルトのキーから削除し、append_labelsに基づいてキーを追加
     results = defaultdict(lambda: {"count": 0, **{label: [] for label in append_labels}})
-    total_files = 0
+    total_files = 0  # 解析されたファイルの総数をカウントするための変数を追加
     
     for file_path in Path(dir_path).glob('**/*'):
         if file_path.suffix not in ['.txt', '.json']:
             continue
 
-        print(f"Analyzing file: {file_path}")
-        total_files += 1
+        print(f"Analyzing file: {file_path}")  # 解析中のファイル名を表示
+        total_files += 1  # 解析されたファイルの数をインクリメント
 
         with open(file_path, 'r', encoding='utf-8') as file:
             try:
                 metadata = json.load(file)
-                # metadata_labelが辞書である場合の特別な処理
-                if isinstance(metadata.get(metadata_label), dict):
-                    for sublabel, label_values in metadata[metadata_label].items():
-                        for label_value in label_values:
-                            results[sublabel]["count"] += 1
-                            for label in append_labels:
-                                if metadata.get(label):
-                                    results[sublabel][label].extend([str(item) for item in metadata[label] if item not in results[sublabel][label]])
-                # metadata_labelが辞書である場合の特別な処理
-                if isinstance(metadata.get(metadata_label), dict):
-                    ...
-                else:
-                    label_values = metadata.get(metadata_label, [])
-                    for label_value in label_values:
-                        results[label_value]["count"] += 1
-                        for label in append_labels:
-                            if label in metadata:  # この行を修正
-                                if isinstance(metadata[label], list):  # リスト型のデータの場合
-                                    results[label_value][label].extend([str(item) for item in metadata[label] if item not in results[label_value][label]])
-                                else:  # リスト型でないデータの場合
-                                    results[label_value][label].append(str(metadata[label]))  # この行を追加
+                label_value = metadata.get(metadata_label, None)
+                if label_value:
+                    results[label_value]["count"] += 1
+                    for label in append_labels:
+                        if metadata.get(label):
+                            results[label_value][label].append(metadata[label])
             except json.JSONDecodeError:
                 print(f"Skipping invalid JSON file: {file_path}")
 
     for result in results.values():
         for label in append_labels:
-            result[label] = ", ".join(sorted(set(result[label])))  # 重複を排除し、ソート
+            if label == "score":
+                result[label] = ", ".join(map(str, result[label]))
+            else:
+                result[label] = ", ".join(set(str(item) for item in result[label]))
 
-    print(f"Analysis complete. Total files analyzed: {total_files}")
+    print(f"Analysis complete. Total files analyzed: {total_files}")  # 解析完了と総ファイル数を表示
 
+    # save_path に対応するディレクトリを確認し、存在しなければ作成
     Path(save_path).mkdir(parents=True, exist_ok=True)
+
     with open(Path(save_path) / "analysis_result.txt", 'w', encoding='utf-8') as file:
         json.dump(results, file, ensure_ascii=False, indent=4)
-        print(f"Results saved to: {Path(save_path) / 'analysis_result.txt'}")
+        print(f"Results saved to: {Path(save_path) / 'analysis_result.txt'}")  # 結果が保存された場所を表示
 
 def main():
     parser = argparse.ArgumentParser(description="Analyze metadata files.")
