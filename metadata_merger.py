@@ -42,12 +42,12 @@ def main(args):
     
     if args.in_json is not None:
         logger.info(f"loading existing metadata: {args.in_json}")
-        try:  # ここから追加
+        try:
             with open(args.in_json, 'r', encoding='utf-8') as f:
                 metadata = json.load(f)
         except json.decoder.JSONDecodeError:
             logger.error("JSONファイルが空または不正なフォーマットです。新しいメタデータファイルが作成されます。")
-            metadata = {}  # ここまで追加
+            metadata = {}
         logger.warning("tags data for existing images will be overwritten / 既存の画像のタグは上書きされます")
     else:
         logger.info("new metadata will be created / 新しいメタデータファイルが作成されます")
