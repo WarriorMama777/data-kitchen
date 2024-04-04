@@ -26,7 +26,7 @@ def analyze_metadata(dir_path, save_path, metadata_label, append_labels=[]):
     for result in results.values():
         result["score"] = ", ".join(map(str, result["score"]))
         for label in append_labels:
-            result[label] = ", ".join(set(result[label]))
+            result[label] = ", ".join(set(str(item) for item in result[label]))
 
     # save_path に対応するディレクトリを確認し、存在しなければ作成
     Path(save_path).mkdir(parents=True, exist_ok=True)
