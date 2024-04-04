@@ -28,6 +28,9 @@ def analyze_metadata(dir_path, save_path, metadata_label, append_labels=[]):
         for label in append_labels:
             result[label] = ", ".join(set(result[label]))
 
+    # save_path に対応するディレクトリを確認し、存在しなければ作成
+    Path(save_path).mkdir(parents=True, exist_ok=True)
+
     with open(Path(save_path) / "analysis_result.txt", 'w', encoding='utf-8') as file:
         json.dump(results, file, ensure_ascii=False, indent=4)
 
