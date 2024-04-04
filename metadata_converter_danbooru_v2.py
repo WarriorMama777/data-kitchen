@@ -8,6 +8,7 @@ def main():
     parser.add_argument('--dir', type=str, help='Directory containing metadata files', required=True)
     parser.add_argument('--save', type=str, help='Directory to save converted files', required=True)
     parser.add_argument('--metadata_order', nargs='+', help='Order of metadata labels to extract', required=True)
+    parser.add_argument('--insert_custom_text', type=str, help='Insert custom text at a specified index in the output, format as index,text', required=False)
 
     args = parser.parse_args()
 
@@ -21,13 +22,13 @@ def main():
     # 指定されたディレクトリ内の全ファイルを処理
     for file_name in files:
         if file_name.endswith('.txt') or file_name.endswith('.json'):
-            process_file(os.path.join(args.dir, file_name), args.save, args.metadata_order)
+            process_file(os.path.join(args.dir, file_name), args.save, args.metadata_order, args.insert_custom_text)
             processed_files += 1
             print(f"Processed {processed_files}/{total_files} files.")
         else:
             print(f"Skipped non-metadata file: {file_name}")
 
-def process_file(file_path, save_dir, metadata_order):
+def process_file(file_path, save_dir, metadata_order, insert_custom_text=None):
     with open(file_path, 'r', encoding='utf-8') as file:
         try:
             metadata = json.load(file)
@@ -45,6 +46,10 @@ def process_file(file_path, save_dir, metadata_order):
             else:
                 value = metadata[key].replace(' ', ',')
             extracted_data.append(value)
+
+    if insert_custom_text:
+        index, text = insert_custom_text.split(',', 1)
+        extracted_data.insert(int(index), text)
 
     # 連続するカンマを取り除く
     output_content = ','.join(filter(None, extracted_data))
