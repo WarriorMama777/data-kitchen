@@ -17,13 +17,27 @@ def analyze_metadata(dir_path, save_path, metadata_label, append_labels=[]):
         with open(file_path, 'r', encoding='utf-8') as file:
             try:
                 metadata = json.load(file)
-                label_values = metadata.get(metadata_label, [])
-                for label_value in label_values:  # metadata_labelがリストであることを想定
-                    results[label_value]["count"] += 1
-                    for label in append_labels:
-                        if metadata.get(label):
-                            # append_labelsに該当するデータもリスト形式を想定
-                            results[label_value][label].extend([str(item) for item in metadata[label] if item not in results[label_value][label]])
+                # metadata_labelが辞書である場合の特別な処理
+                if isinstance(metadata.get(metadata_label), dict):
+                    for sublabel, label_values in metadata[metadata_label].items():
+                        for label_value in label_values:
+                            results[sublabel]["count"] += 1
+                            for label in append_labels:
+                                if metadata.get(label):
+                                    results[sublabel][label].extend([str(item) for item in metadata[label] if item not in results[sublabel][label]])
+                # metadata_labelが辞書である場合の特別な処理
+                if isinstance(metadata.get(metadata_label), dict):
+                    ...
+                else:
+                    label_values = metadata.get(metadata_label, [])
+                    for label_value in label_values:
+                        results[label_value]["count"] += 1
+                        for label in append_labels:
+                            if label in metadata:  # この行を修正
+                                if isinstance(metadata[label], list):  # リスト型のデータの場合
+                                    results[label_value][label].extend([str(item) for item in metadata[label] if item not in results[label_value][label]])
+                                else:  # リスト型でないデータの場合
+                                    results[label_value][label].append(str(metadata[label]))  # この行を追加
             except json.JSONDecodeError:
                 print(f"Skipping invalid JSON file: {file_path}")
 
