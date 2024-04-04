@@ -5,10 +5,14 @@ from collections import defaultdict
 
 def analyze_metadata(dir_path, save_path, metadata_label, append_labels=[]):
     results = defaultdict(lambda: {"count": 0, "score": [], **{label: [] for label in append_labels}})
+    total_files = 0  # 解析されたファイルの総数をカウントするための変数を追加
     
     for file_path in Path(dir_path).glob('**/*'):
         if file_path.suffix not in ['.txt', '.json']:
             continue
+
+        print(f"Analyzing file: {file_path}")  # 解析中のファイル名を表示
+        total_files += 1  # 解析されたファイルの数をインクリメント
 
         with open(file_path, 'r', encoding='utf-8') as file:
             try:
@@ -28,11 +32,14 @@ def analyze_metadata(dir_path, save_path, metadata_label, append_labels=[]):
         for label in append_labels:
             result[label] = ", ".join(set(str(item) for item in result[label]))
 
+    print(f"Analysis complete. Total files analyzed: {total_files}")  # 解析完了と総ファイル数を表示
+
     # save_path に対応するディレクトリを確認し、存在しなければ作成
     Path(save_path).mkdir(parents=True, exist_ok=True)
 
     with open(Path(save_path) / "analysis_result.txt", 'w', encoding='utf-8') as file:
         json.dump(results, file, ensure_ascii=False, indent=4)
+        print(f"Results saved to: {Path(save_path) / 'analysis_result.txt'}")  # 結果が保存された場所を表示
 
 def main():
     parser = argparse.ArgumentParser(description="Analyze metadata files.")
