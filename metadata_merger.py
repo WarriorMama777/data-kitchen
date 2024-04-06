@@ -28,11 +28,26 @@ def main(args):
     append_data_dir_path = Path(args.dir_append_data)
     assert append_data_dir_path.is_dir(), f"{args.dir_append_data} does not exist or is not a directory."
 
-    if args.dir_json and Path(args.dir_json).is_file():
-        with open(args.dir_json, 'r', encoding='utf-8') as f:
-            metadata = json.load(f)
+    dir_save_json_path = Path(args.dir_save_json)
+    metadata = {}
+
+    # dir_save_jsonがディレクトリかファイルかを判断
+    if dir_save_json_path.is_dir():
+        json_files = list(dir_save_json_path.glob('*.json'))
+        if len(json_files) > 1:
+            raise ValueError("Specified directory contains more than one JSON file.Please specify the path to the JSON file if you want to select a specific JSON file.")
+        elif len(json_files) == 1:
+            with open(json_files[0], 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+            dir_save_json_path = json_files[0]  # 単一のJSONファイルのパスを使用
+        else:
+            dir_save_json_path = dir_save_json_path / 'datasets_metadata.json'
+    elif dir_save_json_path.suffix == '.json':
+        if dir_save_json_path.exists():
+            with open(dir_save_json_path, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
     else:
-        metadata = {}
+        raise ValueError("--dir_save_json must be a directory or a JSON file path.")
 
     image_paths = glob_images_pathlib(base_dir_path, args.recursive)
     logger.info(f"Found {len(image_paths)} images in base directory.")
@@ -51,7 +66,6 @@ def main(args):
             metadata[image_key][args.append_data_key] = append_data
 
     # メタデータをJSONファイルに保存
-    dir_save_json_path = Path(args.dir_save_json) / 'datasets_metadata.json'  # デフォルトファイル名を使用
     with open(dir_save_json_path, 'w', encoding='utf-8') as f:
         json.dump(metadata, f, indent=2)
 
@@ -62,8 +76,7 @@ def setup_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dir_base", type=str, required=True, help="Base directory path for root metadata files.")
     parser.add_argument("--dir_append_data", type=str, required=True, help="Directory path for files to be appended to JSON.")
-    parser.add_argument("--dir_json", type=str, help="Path to the existing metadata JSON file.")
-    parser.add_argument("--dir_save_json", type=str, required=True, help="Directory to save the output metadata JSON file. Uses default 'datasets_metadata.json' if file name is not specified.")
+    parser.add_argument("--dir_save_json", type=str, required=True, help="Path to save the output metadata JSON file or directory to search for the existing JSON file.")
     parser.add_argument("--save_full_path", action="store_true", help="Use full path for image keys in the metadata.")
     parser.add_argument("--recursive", action="store_true", help="Recursively search directories for images.")
     parser.add_argument("--debug", action="store_true", help="Debug mode to output tag information.")
