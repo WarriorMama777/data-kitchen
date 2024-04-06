@@ -7,8 +7,8 @@ def main():
     parser = argparse.ArgumentParser(description='Convert Danbooru metadata files to plain text format.')
     parser.add_argument('--dir', type=str, help='Directory containing metadata files', required=True)
     parser.add_argument('--save', type=str, help='Directory to save converted files', required=True)
-    parser.add_argument('--metadata_order', nargs='+', help='Order of metadata labels to extract', required=True)
-    parser.add_argument('--insert_custom_text', type=str, help='Insert custom text at a specified index in the output, format as index,text', required=False)
+    parser.add_argument('--metadata_order', nargs='+', help='Order of metadata labels to extract. Format: --metadata_order "METADATA_LABEL" "METADATA_LABEL"', required=True)
+    parser.add_argument('--insert_custom_text', type=str, help='Insert custom text at a specified index in the output. Format: --insert_custom_text INDEX,CUSTOM_TEXT @Note: index counts from 0. ', required=False)
 
     args = parser.parse_args()
 
