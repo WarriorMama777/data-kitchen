@@ -9,10 +9,17 @@ logger = logging.getLogger(__name__)
 
 def glob_images_pathlib(directory, recursive):
     """指定されたディレクトリから画像のパスを取得する"""
+    image_extensions = ['jpg', 'jpeg', 'webp', 'gif', 'png']  # 対応する画像ファイルの拡張子
     if recursive:
-        return list(directory.rglob('*.jpg'))  # 画像ファイルの検索を.jpgに限定
+        paths = []
+        for extension in image_extensions:
+            paths.extend(directory.rglob(f'*.{extension}'))
+        return paths
     else:
-        return list(directory.glob('*.jpg'))  # 画像ファイルの検索を.jpgに限定
+        paths = []
+        for extension in image_extensions:
+            paths.extend(directory.glob(f'*.{extension}'))
+        return paths
 
 def main(args):
     base_dir_path = Path(args.dir_base)
