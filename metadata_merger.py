@@ -57,7 +57,11 @@ def main(args):
 
     # 画像ファイルの処理
     for image_path in image_paths:
-        image_key = str(image_path) if args.save_full_path else image_path.name
+        if args.save_full_path:
+            image_key = str(image_path)
+        else:
+            # base_dir_pathからの相対パスを使用してキーを生成
+            image_key = str(image_path.relative_to(base_dir_path)).replace("\\", "/") # Windowsのパス区切り文字を正しく扱うための修正
 
         # メタデータにキーを追加
         if image_key not in metadata:
