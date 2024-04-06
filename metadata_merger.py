@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 def glob_images_pathlib(directory, recursive):
     """指定されたディレクトリから画像のパスを取得する"""
     if recursive:
-        return list(directory.rglob('*.*'))
+        return list(directory.rglob('*.jpg'))  # 画像ファイルの検索を.jpgに限定
     else:
-        return list(directory.glob('*.*'))
+        return list(directory.glob('*.jpg'))  # 画像ファイルの検索を.jpgに限定
 
 def main(args):
     base_dir_path = Path(args.dir_base)
@@ -44,11 +44,11 @@ def main(args):
             metadata[image_key][args.append_data_key] = append_data
 
     # メタデータをJSONファイルに保存
-    dir_save_json_path = Path(args.dir_save_json)
+    dir_save_json_path = Path(args.dir_save_json) / 'datasets_metadata.json'  # デフォルトファイル名を使用
     with open(dir_save_json_path, 'w', encoding='utf-8') as f:
         json.dump(metadata, f, indent=2)
 
-    logger.info(f"Metadata saved to {args.dir_save_json}")
+    logger.info(f"Metadata saved to {dir_save_json_path}")
 
 def setup_parser():
     """コマンドライン引数のパーサーを設定する"""
@@ -56,7 +56,7 @@ def setup_parser():
     parser.add_argument("--dir_base", type=str, required=True, help="Base directory path for root metadata files.")
     parser.add_argument("--dir_append_data", type=str, required=True, help="Directory path for files to be appended to JSON.")
     parser.add_argument("--dir_json", type=str, help="Path to the existing metadata JSON file.")
-    parser.add_argument("--dir_save_json", type=str, required=True, help="Path to save the output metadata JSON file.")
+    parser.add_argument("--dir_save_json", type=str, required=True, help="Directory to save the output metadata JSON file. Uses default 'datasets_metadata.json' if file name is not specified.")
     parser.add_argument("--save_full_path", action="store_true", help="Use full path for image keys in the metadata.")
     parser.add_argument("--recursive", action="store_true", help="Recursively search directories for images.")
     parser.add_argument("--debug", action="store_true", help="Debug mode to output tag information.")
