@@ -16,14 +16,25 @@ def analyze_metadata(dir_path, save_path, metadata_label, count=False, metadata_
                         metadata = json.load(f)
 
                         # metadata_labelに基づいてデータを集計
-                        if metadata_label in metadata['tags']:
-                            for label_value in metadata['tags'][metadata_label]:
-                                results[label_value]['count'].append(1)
-                                for append_label in metadata_append:
-                                    if append_label in metadata:
-                                        results[label_value][append_label].append(metadata[append_label])
-                                    elif append_label in metadata['tags']:
-                                        results[label_value][append_label].extend(metadata['tags'][append_label])
+                        label_values = []
+                        if metadata_label in metadata:
+                            # metadata_labelがトップレベルに存在する場合
+                            if isinstance(metadata[metadata_label], list):
+                                label_values.extend(metadata[metadata_label])
+                            else:
+                                label_values.append(metadata[metadata_label])
+                        elif 'tags' in metadata and metadata_label in metadata['tags']:
+                            # metadata_labelがtags内に存在する場合
+                            label_values.extend(metadata['tags'][metadata_label])
+
+                        for label_value in label_values:
+                            results[label_value]['count'].append(1)
+                            for append_label in metadata_append:
+                                if append_label in metadata and metadata[append_label] is not None:
+                                    results[label_value][append_label].append(metadata[append_label])
+                                elif 'tags' in metadata and append_label in metadata['tags'] and metadata['tags'][append_label] is not None:
+                                    results[label_value][append_label].extend(metadata['tags'][append_label])
+
                 except Exception as e:
                     print(f"Error processing file {file_path}: {e}")
 
@@ -34,16 +45,12 @@ def analyze_metadata(dir_path, save_path, metadata_label, count=False, metadata_
         final_results[artist]['count'] = str(sum(data['count']))
         for key, values in data.items():
             if key != 'count':
-                if isinstance(values, list):
-                    # リスト内の要素をフラットにするため、拡張されたリスト理解を使用
-                    flat_list = [item for sublist in values for item in (sublist if isinstance(sublist, list) else [sublist])]
-                    # ユニークな要素のみを保持
-                    unique_items = set(flat_list)
-                    # 最終的な文字列の生成
-                    final_results[artist][key] = ", ".join(map(str, unique_items))
-                else:
-                    # valuesがリストでない場合、単一の要素として扱う
-                    final_results[artist][key] = str(values)
+                # リスト内の要素をフラットにするため、拡張されたリスト理解を使用
+                flat_list = [item for sublist in values for item in (sublist if isinstance(sublist, list) else [sublist])]
+                # ユニークな要素のみを保持
+                unique_items = set(flat_list)
+                # 最終的な文字列の生成
+                final_results[artist][key] = ", ".join(map(str, unique_items))
 
     # 結果を保存
     save_file_path = os.path.join(save_path, 'analysis_result.txt')
