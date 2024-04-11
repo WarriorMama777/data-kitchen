@@ -15,6 +15,9 @@ def execute_task(task_file, debug=False):
         print(f"エラー: ファイルの読み込み中に問題が発生しました - {e}")
         sys.exit(1)
 
+    executable_tasks = []
+    not_executable_tasks = []
+
     for index, task in enumerate(tasks, start=1):
         task = task.strip()
         if not task:
@@ -28,10 +31,22 @@ def execute_task(task_file, debug=False):
         # 実行ファイルがシステムのパス上に存在するかどうかをチェック
         if shutil.which(cmd_list[0]) is None:
             print(f"{index}番目のタスク '{task}' は実行不可能です: コマンド '{cmd_list[0]}' が見つかりません")
+            not_executable_tasks.append(task)
         else:
             print(f"{index}番目のタスク '{task}' は実行可能です")
+            executable_tasks.append(task)
 
         print(f"{index}番目のタスクのチェックが完了しました\n")
+
+    # デバッグ情報の最終結果を表示
+    if debug:
+        print("デバッグ情報の最終結果:")
+        print("実行可能なタスク:")
+        for task in executable_tasks:
+            print(f" - {task}")
+        print("実行不可能なタスク:")
+        for task in not_executable_tasks:
+            print(f" - {task}")
 
 def main():
     parser = argparse.ArgumentParser(description="指定されたテキストファイルに記載されたタスクをチェックするスクリプト")
