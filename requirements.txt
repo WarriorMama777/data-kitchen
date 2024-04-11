@@ -2,3 +2,4 @@ requests
 tqdm
 Pillow
 opencv-python
+gallery-dl
