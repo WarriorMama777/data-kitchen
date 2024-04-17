@@ -18,8 +18,15 @@ def rename_files(args):
     num_length = len(str(file_count))
 
     for i, filename in enumerate(files, start=1):
-        # 拡張子を取得し、ファイル名から拡張子を除く
-        base_name, extension = os.path.splitext(filename)
+        old_path = os.path.join(directory, filename)
+        if os.path.isdir(old_path):
+            # ディレクトリの場合、拡張子を操作せずに処理を続行
+            extension = ""
+            base_name = filename
+        else:
+            # 拡張子を取得し、ファイル名から拡張子を除く
+            base_name, extension = os.path.splitext(filename)
+        
         new_name = base_name
 
         if args.del_first:
@@ -40,9 +47,14 @@ def rename_files(args):
         if args.add_number_last:
             new_name = new_name + f"_{i:0{num_length}d}"
 
+        # --replaceオプションの処理
         if args.replace:
-            old, new = args.replace.split("->")
-            new_name = new_name.replace(old, new)
+            old, new = args.replace
+            # スペース、コンマ、ドットを含む可能性がある部分を正規表現でマッチさせるパターンに変更
+            # エスケープが必要な特殊文字自体はエスケープしつつ、スペース、コンマ、ドットの連続を考慮
+            old_pattern = re.sub(r'\\([\ ,\.])', r'[\ \.,]+', re.escape(old))
+            pattern = re.compile(old_pattern)
+            new_name = pattern.sub(new, new_name)
 
         # 指定した文字以降を削除
         if args.del_after:
@@ -113,7 +125,7 @@ if __name__ == "__main__":
     parser.add_argument("--add_last", type=str, help="末尾に文字を追加")
     parser.add_argument("--add_number_first", action='store_true', help="先頭に連番を追加")
     parser.add_argument("--add_number_last", action='store_true', help="末尾に連番を追加")
-    parser.add_argument("--replace", type=str, help="文字を置換する(例: 'neko->piyo')")
+    parser.add_argument("--replace", nargs=2, help="文字を置換する(例: '--replace \"neko\" \"piyo\"')")
     parser.add_argument("--del_after", type=str, help="指定した文字以降を削除")
     parser.add_argument("--del_before", type=str, help="指定した文字以前を削除")
     parser.add_argument("--add_after", type=str, help="指定した文字の後ろに文字を追加 (形式: '検索文字列,追加文字列')")
