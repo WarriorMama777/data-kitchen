@@ -88,6 +88,11 @@ def rename_files(args):
         # 最後に拡張子を再度付加
         new_name += extension
 
+        # デバッグモードが有効の場合は、ファイル名の変更を行わずに情報のみを表示
+        if args.debug:
+            print(f"デバッグモード: '{filename}' から '{new_name}' への変更をシミュレートします。")
+            continue  # 処理をスキップ
+
         if new_name != filename:
             old_path = os.path.join(directory, filename)
             new_path = os.path.join(directory, new_name)
@@ -113,9 +118,9 @@ if __name__ == "__main__":
     parser.add_argument("--del_before", type=str, help="指定した文字以前を削除")
     parser.add_argument("--add_after", type=str, help="指定した文字の後ろに文字を追加 (形式: '検索文字列,追加文字列')")
     parser.add_argument("--add_before", type=str, help="指定した文字の前に文字を追加 (形式: '検索文字列,追加文字列')")
-    parser.add_argument("--reg_del", type=str, help="正規表現でマッチした箇所を削除")
-    parser.add_argument("--reg_del_around", type=str, help="正規表現でマッチした箇所以外を削除")
-
+    parser.add_argument("--del_reg", type=str, help="正規表現でマッチした箇所を削除", dest="reg_del")  # 引数名称変更
+    parser.add_argument("--del_reg_around", type=str, help="正規表現でマッチした箇所以外を削除", dest="reg_del_around")  # 引数名称変更
+    parser.add_argument("--debug", action='store_true', help="デバッグモード：ファイル名の変更を行わずに情報のみを表示")
 
     args = parser.parse_args()
 
