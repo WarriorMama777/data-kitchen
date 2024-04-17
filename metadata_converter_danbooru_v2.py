@@ -4,15 +4,7 @@ import os
 from pathlib import Path
 
 def process_directory(directory_path, save_dir, metadata_order, insert_custom_texts=None):
-    """
-    指定されたディレクトリ内を再帰的に探索し、条件に一致するファイルを処理する。
-    
-    Args:
-        directory_path (str): 処理するファイルが含まれるディレクトリのパス。
-        save_dir (str): 処理後のファイルを保存するディレクトリのパス。
-        metadata_order (list): 抽出するメタデータの順序。
-        insert_custom_texts (list, optional): 指定されたインデックスに挿入するカスタムテキストのリスト。デフォルトはNone。
-    """
+    #指定されたディレクトリ内を再帰的に探索し、条件に一致するファイルを処理する。
     print(f"{directory_path} 内のファイルを処理中...")
     for root, dirs, files in os.walk(directory_path):
         relative_path = os.path.relpath(root, directory_path)
@@ -25,15 +17,7 @@ def process_directory(directory_path, save_dir, metadata_order, insert_custom_te
                 process_file(file_path, current_save_dir, metadata_order, insert_custom_texts)
 
 def process_file(file_path, save_dir, metadata_order, insert_custom_texts=None):
-    """
-    単一のファイルを処理し、指定されたメタデータ順序に従ってデータを抽出し、カスタムテキストを挿入する。
-
-    Args:
-        file_path (str): 処理するファイルのパス。
-        save_dir (str): 処理後のファイルを保存するディレクトリのパス。
-        metadata_order (list): 抽出するメタデータの順序。
-        insert_custom_texts (list, optional): 指定されたインデックスに挿入するカスタムテキストのリスト。デフォルトはNone。
-    """
+    #単一のファイルを処理し、指定されたメタデータ順序に従ってデータを抽出し、カスタムテキストを挿入する。
     with open(file_path, 'r', encoding='utf-8') as file:
         try:
             metadata = json.load(file)
@@ -64,9 +48,7 @@ def process_file(file_path, save_dir, metadata_order, insert_custom_texts=None):
     print(f"Processed: {file_path} -> {output_file_path}")
 
 def main():
-    """
-    コマンドライン引数を解析し、プログラムのメインロジックを実行する。
-    """
+    #コマンドライン引数を解析し、プログラムのメインロジックを実行する
     parser = argparse.ArgumentParser(description='Convert Danbooru metadata files to plain text format.')
     parser.add_argument('--dir', type=str, help='Directory containing metadata files', required=True)
     parser.add_argument('--save', type=str, help='Directory to save converted files', required=True)
