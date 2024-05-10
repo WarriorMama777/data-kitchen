@@ -29,16 +29,14 @@ def execute_task(task_file, debug=False):
         else:
             print(f"{index}番目のタスクを実行中: {task}")
             try:
-                # subprocess.runを使用してPythonコードを実行
-                result = subprocess.run(['python', '-c', task], check=True, text=True, capture_output=True)
+                # シェルコマンドを実行
+                result = subprocess.run(task, shell=True, check=True, text=True, capture_output=True)
                 print(f"実行結果:\n{result.stdout}")
             except subprocess.CalledProcessError as e:
                 print(f"エラー: タスクの実行中にエラーが発生しました - {e.stderr}")
             except Exception as e:
                 print(f"エラー: 予期せぬエラーが発生しました - {e}")
-            finally:
-                print(f"{index}番目のタスクの実行が完了しました\n")
-
+                
 def main():
     parser = argparse.ArgumentParser(description="指定されたテキストファイルに記載されたタスクを実行するスクリプト")
     parser.add_argument('task_file', type=str, help="実行するタスクが記載されたテキストファイルのパス")
