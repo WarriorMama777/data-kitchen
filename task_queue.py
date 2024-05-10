@@ -1,8 +1,7 @@
 import argparse
-import shlex
 import subprocess
 import sys
-import shutil  # shutilをインポート
+import shutil  # shutil.whichを使用するために追加
 
 def execute_task(task_file, debug=False):
     try:
@@ -15,46 +14,38 @@ def execute_task(task_file, debug=False):
         print(f"エラー: ファイルの読み込み中に問題が発生しました - {e}")
         sys.exit(1)
 
-    executable_tasks = []
-    not_executable_tasks = []
-
     for index, task in enumerate(tasks, start=1):
         task = task.strip()
         if not task:
             continue
 
-        cmd_list = shlex.split(task)  # コマンドラインをリストに分割
-
-        if debug:  # デバッグモード時の追加情報
-            print(f"デバッグ: {index}番目のタスク '{task}' を処理しています。コマンドリスト: {cmd_list}")
-        
-        # 実行ファイルがシステムのパス上に存在するかどうかをチェック
-        if shutil.which(cmd_list[0]) is None:
-            print(f"{index}番目のタスク '{task}' は実行不可能です: コマンド '{cmd_list[0]}' が見つかりません")
-            not_executable_tasks.append(task)
+        if debug:
+            # コマンドがシステム上に存在するかどうかを確認
+            command = task.split()[0]  # コマンド名を取得
+            if shutil.which(command):
+                print(f"{index}番目のタスク '{task}' はシステム上に存在します。")
+            else:
+                print(f"{index}番目のタスク '{task}' はシステム上に存在しません。")
         else:
-            print(f"{index}番目のタスク '{task}' は実行可能です")
-            executable_tasks.append(task)
-
-        print(f"{index}番目のタスクのチェックが完了しました\n")
-
-    # デバッグ情報の最終結果を表示
-    if debug:
-        print("デバッグ情報の最終結果:")
-        print("実行可能なタスク:")
-        for task in executable_tasks:
-            print(f" - {task}")
-        print("実行不可能なタスク:")
-        for task in not_executable_tasks:
-            print(f" - {task}")
+            print(f"{index}番目のタスクを実行中: {task}")
+            try:
+                # subprocess.runを使用してPythonコードを実行
+                result = subprocess.run(['python', '-c', task], check=True, text=True, capture_output=True)
+                print(f"実行結果:\n{result.stdout}")
+            except subprocess.CalledProcessError as e:
+                print(f"エラー: タスクの実行中にエラーが発生しました - {e.stderr}")
+            except Exception as e:
+                print(f"エラー: 予期せぬエラーが発生しました - {e}")
+            finally:
+                print(f"{index}番目のタスクの実行が完了しました\n")
 
 def main():
-    parser = argparse.ArgumentParser(description="指定されたテキストファイルに記載されたタスクをチェックするスクリプト")
-    parser.add_argument('task_file', type=str, help="チェックするタスクが記載されたテキストファイルのパス")
-    parser.add_argument('--debug', action='store_true', help="デバッグ情報を表示する")
+    parser = argparse.ArgumentParser(description="指定されたテキストファイルに記載されたタスクを実行するスクリプト")
+    parser.add_argument('task_file', type=str, help="実行するタスクが記載されたテキストファイルのパス")
+    parser.add_argument('--debug', action='store_true', help="デバッグモードを有効にする")
     
     args = parser.parse_args()
-    execute_task(args.task_file, args.debug)
+    execute_task(args.task_file, debug=args.debug)
 
 if __name__ == '__main__':
     main()

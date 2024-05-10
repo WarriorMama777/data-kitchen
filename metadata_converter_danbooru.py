@@ -1,66 +1,65 @@
 import argparse
 import json
 import os
+from pathlib import Path
 
-def format_metadata(directory_path):
-    total_files = 0
-    processed_files = 0
-    skipped_files = 0
-    # 処理対象のファイル拡張子リスト
-    target_extensions = ['.txt', '.json']
+def process_directory(directory_path, save_dir, metadata_order, insert_custom_texts=None):
+    #指定されたディレクトリ内を再帰的に探索し、条件に一致するファイルを処理する。
+    print(f"{directory_path} 内のファイルを処理中...")
+    for root, dirs, files in os.walk(directory_path):
+        relative_path = os.path.relpath(root, directory_path)
+        current_save_dir = os.path.join(save_dir, relative_path)
+        Path(current_save_dir).mkdir(parents=True, exist_ok=True)
 
-    print(f"Processing directory: {directory_path}")
-    
-    for filename in os.listdir(directory_path):
-        # 処理対象のファイル拡張子かどうかをチェック
-        if any(filename.endswith(ext) for ext in target_extensions):
-            total_files += 1
-            file_path = os.path.join(directory_path, filename)
-            print(f"Processing file: {filename}")
+        for file_name in files:
+            if file_name.endswith('.txt') or file_name.endswith('.json'):
+                file_path = os.path.join(root, file_name)
+                process_file(file_path, current_save_dir, metadata_order, insert_custom_texts)
 
-            with open(file_path, 'r', encoding='utf-8') as file:
-                try:
-                    data = json.loads(file.read())
-                except json.JSONDecodeError:
-                    print(f"Skipping {filename}: not a valid JSON.")
-                    skipped_files += 1
-                    continue
+def process_file(file_path, save_dir, metadata_order, insert_custom_texts=None):
+    #単一のファイルを処理し、指定されたメタデータ順序に従ってデータを抽出し、カスタムテキストを挿入する。
+    with open(file_path, 'r', encoding='utf-8') as file:
+        try:
+            metadata = json.load(file)
+        except json.JSONDecodeError:
+            print(f"Warning: Skipping file due to JSONDecodeError: {file_path}")
+            return
 
-            # 各タグカテゴリのデータを抽出し、カンマ区切りの文字列に変換
-            tag_string_copyright = data.get('tag_string_copyright', '').replace(' ', ',')
-            tag_string_character = data.get('tag_string_character', '').replace(' ', ',')
-            tag_string_general = data.get('tag_string_general', '').replace(' ', ',')
-            tag_string_meta = data.get('tag_string_meta', '').replace(' ', ',')
-            tag_string_artist = data.get('tag_string_artist', '').replace(' ', ',')
+    extracted_data = []
+    for key in metadata_order:
+        value = metadata.get(key, "")
+        if value:
+            if key == 'rating':
+                value = f'rating_{value}'
+            else:
+                value = value.replace(' ', ',')
+        extracted_data.append(value)
 
-            # レーティングの整形
-            rating = "rating_" + data.get('rating', '')
+    if insert_custom_texts:
+        insert_pairs = [(int(insert_custom_texts[i]), insert_custom_texts[i + 1]) for i in range(0, len(insert_custom_texts), 2)]
+        for index, text in sorted(insert_pairs, key=lambda x: x[0], reverse=True):
+            extracted_data.insert(index, text)
 
-            # 全部を一つの文字列に結合する前に空の文字列を除外
-            tags_and_rating = [tag_string for tag_string in [
-                tag_string_copyright, tag_string_character, tag_string_general,
-                tag_string_meta, rating, tag_string_artist
-            ] if tag_string]
+    output_content = ','.join(filter(None, extracted_data))
+    output_file_path = os.path.join(save_dir, os.path.basename(file_path))
 
-            # 空でない文字列をカンマで結合
-            formatted_string = ",".join(tags_and_rating)
+    with open(output_file_path, 'w', encoding='utf-8') as output_file:
+        output_file.write(output_content)
+    print(f"Processed: {file_path} -> {output_file_path}")
 
-            # 先頭と末尾の不要なカンマを削除
-            formatted_string = formatted_string.strip(',')
-
-            # 結果を同じファイルに上書き保存
-            with open(file_path, 'w', encoding='utf-8') as file:
-                file.write(formatted_string)
-
-            print(f"Successfully processed: {filename}")
-            processed_files += 1
-
-    print(f"Processing completed. Total files: {total_files}, Processed: {processed_files}, Skipped: {skipped_files}")
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Format metadata from files within a directory and save them.")
-    parser.add_argument("--directory", type=str, default="./", help="Path to the directory containing files")
+def main():
+    #コマンドライン引数を解析し、プログラムのメインロジックを実行する
+    parser = argparse.ArgumentParser(description='Convert Danbooru metadata files to plain text format.')
+    parser.add_argument('--dir', type=str, help='Directory containing metadata files', required=True)
+    parser.add_argument('--save', type=str, help='Directory to save converted files', required=True)
+    parser.add_argument('--metadata_order', nargs='+', help='Order of metadata labels to extract. Format: --metadata_order "METADATA_LABEL" "METADATA_LABEL"', required=True)
+    parser.add_argument('--insert_custom_text', nargs='*', help='Insert custom texts at specified indexes in the output. Format: --insert_custom_text INDEX "CUSTOM_TEXT" INDEX "CUSTOM_TEXT" ...', required=False)
 
     args = parser.parse_args()
 
-    format_metadata(args.directory)
+    Path(args.save).mkdir(parents=True, exist_ok=True)
+
+    process_directory(args.dir, args.save, args.metadata_order, args.insert_custom_text)
+
+if __name__ == '__main__':
+    main()
