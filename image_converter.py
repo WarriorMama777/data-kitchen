@@ -10,7 +10,12 @@ def convert_colorcode_to_bgr(colorcode):
     lv = len(colorcode)
     return tuple(int(colorcode[i:i + lv // 3], 16) for i in range(0, lv, lv // 3))[::-1]
 
-def process_image(image_path, save_path, background, resize, format, quality):
+def process_image(image_path, save_path, background, resize, format, quality, debug):
+    if debug:
+        print(f"Debug: Would process image: {image_path} with settings -> background: {background}, resize: {resize}, format: {format}, quality: {quality}")
+        return True  # 画像処理をスキップし、常に成功したとみなします。
+
+    # 以下のコードは実際の画像処理を行います。
     image = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
     if image is None:
         print(f"Failed to load image: {image_path}")
@@ -44,7 +49,7 @@ def process_image(image_path, save_path, background, resize, format, quality):
 
     return True
 
-def process_directory(dir_path, save_dir, extensions, recursive, background, resize, format, quality):
+def process_directory(dir_path, save_dir, extensions, recursive, background, resize, format, quality, debug):
     if recursive:
         files = [f for ext in extensions for f in Path(dir_path).rglob(f'*.{ext}')]
     else:
@@ -55,7 +60,7 @@ def process_directory(dir_path, save_dir, extensions, recursive, background, res
         save_path = save_dir / relative_path
         save_path.parent.mkdir(parents=True, exist_ok=True)
 
-        process_image(file_path, save_path, background, resize, format, quality)
+        process_image(file_path, save_path, background, resize, format, quality, debug)
 
 def main():
     parser = argparse.ArgumentParser(description='Convert and process images.')
@@ -67,6 +72,7 @@ def main():
     parser.add_argument('--resize', type=int, help='Resize the long side to this size')
     parser.add_argument('--format', help='Format to convert images to')
     parser.add_argument('--quality', nargs='?', type=int, default=90, help='Quality for conversion, applicable to formats like webp, jpg, png')
+    parser.add_argument('--debug', action='store_true', help='Run in debug mode without processing images')
 
     args = parser.parse_args()
 
@@ -78,7 +84,8 @@ def main():
         args.background,
         args.resize,
         args.format,
-        args.quality
+        args.quality,
+        args.debug
     )
 
 if __name__ == '__main__':
