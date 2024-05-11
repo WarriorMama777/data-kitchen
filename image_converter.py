@@ -12,44 +12,49 @@ def convert_colorcode_to_bgr(colorcode):
 
 def process_image(image_path, save_path, background, resize, format, quality, debug):
     if debug:
-        print(f"Debug: Would process image: {image_path} with settings -> background: {background}, resize: {resize}, format: {format}, quality: {quality}")
-        return True  # 画像処理をスキップし、常に成功したとみなします。
+        print(f"Debug: Start processing image: {image_path}")
+        print(f"Settings -> background: {background}, resize: {resize}, format: {format}, quality: {quality}")
+        print("Debug: Image processing skipped in debug mode.")
+        return True
+    
+    try:
+        image = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
+        if image is None:
+            raise IOError(f"Failed to load image: {image_path}")
 
-    # 以下のコードは実際の画像処理を行います。
-    image = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
-    if image is None:
-        print(f"Failed to load image: {image_path}")
-        return False
+        if background and image.shape[2] == 4:
+            bgr_color = convert_colorcode_to_bgr(background)
+            alpha_channel = image[:, :, 3]
+            image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
+            mask = alpha_channel[:, :, np.newaxis] / 255.0
+            background_layer = np.full(image.shape, bgr_color, np.uint8)
+            image = (background_layer * (1 - mask) + image * mask).astype(np.uint8)
 
-    if background and image.shape[2] == 4:
-        bgr_color = convert_colorcode_to_bgr(background)
-        alpha_channel = image[:, :, 3]
-        image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
-        mask = alpha_channel[:, :, np.newaxis] / 255.0
-        background_layer = np.full(image.shape, bgr_color, np.uint8)
-        image = (background_layer * (1 - mask) + image * mask).astype(np.uint8)
+        if resize:
+            h, w = image.shape[:2]
+            scale = resize / max(h, w)
+            image = cv2.resize(image, (int(w * scale), int(h * scale)))
 
-    if resize:
-        h, w = image.shape[:2]
-        scale = resize / max(h, w)
-        image = cv2.resize(image, (int(w * scale), int(h * scale)))
-
-    if format:
-        save_path = f"{save_path}.{format}"
-        if format.lower() == 'webp':
-            cv2.imwrite(save_path, image, [cv2.IMWRITE_WEBP_QUALITY, quality])
-        elif format.lower() in ['jpg', 'jpeg']:
-            cv2.imwrite(save_path, image, [cv2.IMWRITE_JPEG_QUALITY, quality])
-        elif format.lower() == 'png':
-            cv2.imwrite(save_path, image, [cv2.IMWRITE_PNG_COMPRESSION, quality])
+        save_path_with_format = f"{save_path}.{format}" if format else save_path
+        if format == 'webp':
+            cv2.imwrite(save_path_with_format, image, [cv2.IMWRITE_WEBP_QUALITY, quality])
+        elif format in ['jpg', 'jpeg']:
+            cv2.imwrite(save_path_with_format, image, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        elif format == 'png':
+            cv2.imwrite(save_path_with_format, image, [cv2.IMWRITE_PNG_COMPRESSION, quality])
         else:
-            cv2.imwrite(save_path, image)
-    else:
-        cv2.imwrite(save_path, image)
+            cv2.imwrite(save_path_with_format, image)
+
+    except Exception as e:
+        print(f"Error processing image {image_path}: {e}")
+        return False
 
     return True
 
 def process_directory(dir_path, save_dir, extensions, recursive, background, resize, format, quality, debug):
+    if debug:
+        print(f"Debug: Start processing directory: {dir_path}")
+
     if recursive:
         files = [f for ext in extensions for f in Path(dir_path).rglob(f'*.{ext}')]
     else:
@@ -60,7 +65,11 @@ def process_directory(dir_path, save_dir, extensions, recursive, background, res
         save_path = save_dir / relative_path
         save_path.parent.mkdir(parents=True, exist_ok=True)
 
-        process_image(file_path, save_path, background, resize, format, quality, debug)
+        if not process_image(file_path, save_path, background, resize, format, quality, debug):
+            print(f"Failed to process image: {file_path}")
+
+    if debug:
+        print(f"Debug: Finished processing directory: {dir_path}")
 
 def main():
     parser = argparse.ArgumentParser(description='Convert and process images.')
