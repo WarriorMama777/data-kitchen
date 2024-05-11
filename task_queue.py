@@ -20,8 +20,7 @@ def execute_task(task_file, debug=False):
             continue
 
         if debug:
-            # コマンドがシステム上に存在するかどうかを確認
-            command = task.split()[0]  # コマンド名を取得
+            command = task.split()[0]
             if shutil.which(command):
                 print(f"{index}番目のタスク '{task}' はシステム上に存在します。")
             else:
@@ -29,14 +28,13 @@ def execute_task(task_file, debug=False):
         else:
             print(f"{index}番目のタスクを実行中: {task}")
             try:
-                # シェルコマンドを実行
-                result = subprocess.run(task, shell=True, check=True, text=True, capture_output=True)
-                print(f"実行結果:\n{result.stdout}")
+                # capture_outputを削除し、stdoutとstderrの出力を直接シェルに出力する
+                subprocess.run(task, shell=True, check=True, text=True)
             except subprocess.CalledProcessError as e:
-                print(f"エラー: タスクの実行中にエラーが発生しました - {e.stderr}")
+                print(f"エラー: タスクの実行中にエラーが発生しました - コマンド '{e.cmd}'、終了コード {e.returncode}")
             except Exception as e:
                 print(f"エラー: 予期せぬエラーが発生しました - {e}")
-                
+
 def main():
     parser = argparse.ArgumentParser(description="指定されたテキストファイルに記載されたタスクを実行するスクリプト")
     parser.add_argument('task_file', type=str, help="実行するタスクが記載されたテキストファイルのパス")
