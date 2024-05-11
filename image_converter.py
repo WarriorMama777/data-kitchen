@@ -62,7 +62,8 @@ def process_directory(dir_path, save_dir, extensions, recursive, background, res
 
     for file_path in tqdm(files, desc="Processing images"):
         relative_path = file_path.relative_to(dir_path)
-        save_path = save_dir / relative_path
+        # 元のファイル名から拡張子を除去し、新しいフォーマットの拡張子を追加
+        save_path = save_dir / relative_path.with_suffix(f'.{format}')
         save_path.parent.mkdir(parents=True, exist_ok=True)
 
         if not process_image(file_path, save_path, background, resize, format, quality, debug):
