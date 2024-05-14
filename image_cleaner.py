@@ -7,22 +7,15 @@ import numpy as np
 from tqdm import tqdm
 
 def dhash(image, hashSize=8):
-    # 画像をリサイズし、グレースケールに変換します
     resized = cv2.resize(image, (hashSize + 1, hashSize))
     gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-
-    # 水平方向のグラデーションを計算します
     diff = gray[:, 1:] > gray[:, :-1]
-
-    # ハッシュ値を生成します
     return sum([2 ** i for (i, v) in enumerate(diff.flatten()) if v])
 
 def hamming_distance(hash1, hash2):
-    # ハミング距離（2つのハッシュ間の差異）を計算します
     return bin(hash1 ^ hash2).count('1')
 
 def main():
-    # 引数を解析します
     parser = argparse.ArgumentParser()
     parser.add_argument("--dir", required=True, help="処理するディレクトリ / Directory to process")
     parser.add_argument("--save_dir", default="output/", help="出力を保存するディレクトリ / Directory to save the output")
@@ -33,26 +26,18 @@ def main():
     parser.add_argument("--threshold", type=int, default=5, help="画像類似度の判定のしきい値 / Threshold for image similarity judgement")
     args = parser.parse_args()
 
-    # 出力ディレクトリが存在しない場合は作成します
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
 
-    # 画像ファイルのパスを取得します
     if args.recursive:
         imagePathList = list(paths.list_images(args.dir))
     else:
         imagePathList = [os.path.join(args.dir, f) for f in os.listdir(args.dir) if f.split('.')[-1] in args.extension.split()]
 
-    # ハッシュ値を格納する辞書
     hashes: Dict[int, List[str]] = {}
 
-    # デバッグモードが有効な場合の処理
-    if args.debug:
-        print(f"画像の解析を行っています｜処理中の枚数: 0 / 処理対象の合計枚数: {len(imagePathList)}")
+    processed_count = 0
 
-    processed_count = 0 # 処理済みの画像数を追跡します
-
-    # 画像を処理します
     for imagePath in tqdm(imagePathList, desc="画像の解析を行っています", disable=not args.verbose):
         if args.verbose:
             print(f"Debug: 画像を処理する予定です {imagePath}")
@@ -72,22 +57,26 @@ def main():
 
         hashes[h] = imagePath
 
-        # 出力ディレクトリにファイルを保存します、ディレクトリ構造を維持します
-        relative_path = os.path.relpath(imagePath, args.dir)
-        save_path = os.path.join(args.save_dir, relative_path)
-        save_dir = os.path.dirname(save_path)
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-        cv2.imwrite(save_path, image)
-        if args.verbose:
-            print(f"保存完了 {imagePath} へ {save_path}。 / Saved {imagePath} to {save_path}.")
-
-        processed_count += 1 # 処理済みの画像数を更新します
-        if args.debug:
+        if not args.debug:  # `--debug`が有効でない場合にのみ保存
+            relative_path = os.path.relpath(imagePath, args.dir)
+            save_path = os.path.join(args.save_dir, relative_path)
+            save_dir = os.path.dirname(save_path)
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+            cv2.imwrite(save_path, image)
+            if args.verbose:
+                print(f"保存完了 {imagePath} へ {save_path}。 / Saved {imagePath} to {save_path}.")
+        
+        processed_count += 1
+        if args.verbose:  # 常にではなく、verboseモードでのみ表示するように変更
             print(f"画像の解析を行っています｜処理中の枚数: {processed_count} / 処理対象の合計枚数: {len(imagePathList)}")
 
-    if args.debug:
-        print(f"類似画像が{len(hashes)}枚見つかりました。")
+    # 実際に保存される画像数を表示
+    if args.debug:  # --debugが有効な場合に表示するように変更
+        print(f"データセットは{processed_count}枚に削減されます。")
+    else:
+        if args.verbose:  # verboseモードでのみ表示するように修正
+            print(f"データセットは{processed_count}枚に削減されました。")
 
 if __name__ == "__main__":
     main()
