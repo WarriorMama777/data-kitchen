@@ -28,7 +28,8 @@ def main():
     parser.add_argument("--save_dir", default="output/", help="出力を保存するディレクトリ / Directory to save the output")
     parser.add_argument("--extension", default="jpg png webp", help="処理するファイル拡張子 / File extensions to process")
     parser.add_argument("--recursive", action='store_true', help="サブディレクトリを再帰的に検索 / Search subdirectories recursively")
-    parser.add_argument("--debug", action='store_true', help="実際の画像処理なしでデバッグモードを有効にします / Enable debug mode without actual image processing")
+    parser.add_argument("-v", "--verbose", action='store_true', help="冗長な情報を表示 / Display verbose information")
+    parser.add_argument("--debug", help="デバッグモードのオプション / Debug mode options", choices=['files', 'process'])
     parser.add_argument("--threshold", type=int, default=5, help="画像類似度の判定のしきい値 / Threshold for image similarity judgement")
     args = parser.parse_args()
 
@@ -45,12 +46,13 @@ def main():
     # ハッシュ値を格納する辞書 / Dictionary to store hash values
     hashes: Dict[int, List[str]] = {}
 
+    if args.debug == "files":
+        print(f"画像の解析を行っています｜処理中の枚数: 0 / 処理対象の合計枚数: {len(imagePathList)}")
+
     # 画像を処理します / Process images
-    for imagePath in tqdm(imagePathList, desc="画像の解析を行っています"):
-        # デバッグモードでは、意図したアクションのみを表示します / In debug mode, only display the intended actions
-        if args.debug:
+    for imagePath in tqdm(imagePathList, desc="画像の解析を行っています", disable=not args.verbose):
+        if args.verbose:
             print(f"Debug: 画像を処理する予定です {imagePath}")
-            continue
 
         image = cv2.imread(imagePath)
         h = dhash(image)
@@ -58,7 +60,8 @@ def main():
         duplicate = False
         for stored_hash in hashes.keys():
             if hamming_distance(h, stored_hash) <= args.threshold:
-                print(f"類似画像が検出されました: {imagePath} は無視されます。")
+                if args.verbose:
+                    print(f"類似画像が検出されました: {imagePath} は無視されます。")
                 duplicate = True
                 break
         if duplicate:
@@ -73,10 +76,11 @@ def main():
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         cv2.imwrite(save_path, image)
-        print(f"保存完了 {imagePath} へ {save_path}。 / Saved {imagePath} to {save_path}.")
-        # デバッグモード時の追加情報表示 / Additional information display in debug mode
-        if args.debug:
-            print(f"Step2: 類似画像が{len(hashes)}枚見つかりました。")
+        if args.verbose:
+            print(f"保存完了 {imagePath} へ {save_path}。 / Saved {imagePath} to {save_path}.")
+
+    if args.debug == "process":
+        print(f"Step2: 類似画像が{len(hashes)}枚見つかりました。")
 
 if __name__ == "__main__":
     main()
