@@ -1,0 +1,8 @@
+requests
+tqdm
+Pillow
+opencv-python
+gallery-dl
+beautifulsoup4
+opencv-python-headless
+faiss-gpu

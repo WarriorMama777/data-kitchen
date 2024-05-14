@@ -1,4 +1,6 @@
 venv/
+venv2/
 example/
 test/
 gallery-dl/
+trash/
