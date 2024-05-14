@@ -69,9 +69,9 @@ def main():
     # 最終的なメッセージを表示
     if args.debug:
         print(f"データセットは{len(hashes)}枚に削減されます。")
-    elif args.verbose:  # elseの代わりにelifを使い、条件を明記する
+    elif args.verbose:
         print(f"データセットは{len(hashes)}枚に削減されました。")
-    else:  # 条件なしでelseを使う
+    else:
         print(f"データセットは{len(hashes)}枚に削減されました。")
 
 if __name__ == "__main__":
