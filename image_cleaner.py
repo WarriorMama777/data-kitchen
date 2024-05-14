@@ -4,6 +4,7 @@ from imutils import paths
 import cv2
 from typing import List, Dict
 import numpy as np
+from tqdm import tqdm
 
 def dhash(image, hashSize=8):
     # 画像をリサイズし、グレースケールに変換します / Resize the image and convert it to grayscale
@@ -45,22 +46,19 @@ def main():
     hashes: Dict[int, List[str]] = {}
 
     # 画像を処理します / Process images
-    for imagePath in imagePathList:
+    for imagePath in tqdm(imagePathList, desc="画像の解析を行っています"):
         # デバッグモードでは、意図したアクションのみを表示します / In debug mode, only display the intended actions
         if args.debug:
-            print(f"Debug: 画像を処理する予定です {imagePath} / Would process {imagePath}")
+            print(f"Debug: 画像を処理する予定です {imagePath}")
             continue
 
-        # 画像を読み込みます / Load the image
         image = cv2.imread(imagePath)
-        # ハッシュを計算します / Compute the hash
         h = dhash(image)
 
-        # 既存のハッシュ値と比較します / Compare with existing hash values
         duplicate = False
         for stored_hash in hashes.keys():
             if hamming_distance(h, stored_hash) <= args.threshold:
-                print(f"類似画像が検出されました: {imagePath} は無視されます。 / Duplicate image detected: {imagePath} will be ignored.")
+                print(f"類似画像が検出されました: {imagePath} は無視されます。")
                 duplicate = True
                 break
         if duplicate:
@@ -76,6 +74,9 @@ def main():
             os.makedirs(save_dir)
         cv2.imwrite(save_path, image)
         print(f"保存完了 {imagePath} へ {save_path}。 / Saved {imagePath} to {save_path}.")
+        # デバッグモード時の追加情報表示 / Additional information display in debug mode
+        if args.debug:
+            print(f"Step2: 類似画像が{len(hashes)}枚見つかりました。")
 
 if __name__ == "__main__":
     main()
