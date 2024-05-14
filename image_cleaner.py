@@ -36,10 +36,9 @@ def main():
 
     hashes: Dict[int, List[str]] = {}
 
-    processed_count = 0
-
-    for imagePath in tqdm(imagePathList, desc="画像の解析を行っています", disable=not args.verbose):
-        if args.verbose:
+    # tqdmのdisableオプションを変更して、常に進行状況バーを表示します。
+    for imagePath in tqdm(imagePathList, desc="画像の解析を行っています"):
+        if args.verbose or args.debug:  # verboseまたはdebugモードが有効な場合に詳細情報を表示
             print(f"Debug: 画像を処理する予定です {imagePath}")
 
         image = cv2.imread(imagePath)
@@ -48,7 +47,7 @@ def main():
         duplicate = False
         for stored_hash in hashes.keys():
             if hamming_distance(h, stored_hash) <= args.threshold:
-                if args.verbose:
+                if args.verbose or args.debug:  # verboseまたはdebugモードでのみ表示
                     print(f"類似画像が検出されました: {imagePath} は無視されます。")
                 duplicate = True
                 break
@@ -64,19 +63,16 @@ def main():
             if not os.path.exists(save_dir):
                 os.makedirs(save_dir)
             cv2.imwrite(save_path, image)
-            if args.verbose:
+            if args.verbose or args.debug:  # verboseまたはdebugモードでのみ表示
                 print(f"保存完了 {imagePath} へ {save_path}。 / Saved {imagePath} to {save_path}.")
-        
-        processed_count += 1
-        if args.verbose:  # 常にではなく、verboseモードでのみ表示するように変更
-            print(f"画像の解析を行っています｜処理中の枚数: {processed_count} / 処理対象の合計枚数: {len(imagePathList)}")
 
-    # 実際に保存される画像数を表示
-    if args.debug:  # --debugが有効な場合に表示するように変更
-        print(f"データセットは{processed_count}枚に削減されます。")
-    else:
-        if args.verbose:  # verboseモードでのみ表示するように修正
-            print(f"データセットは{processed_count}枚に削減されました。")
+    # 最終的なメッセージを表示
+    if args.debug:
+        print(f"データセットは{len(hashes)}枚に削減されます。")
+    elif args.verbose:  # elseの代わりにelifを使い、条件を明記する
+        print(f"データセットは{len(hashes)}枚に削減されました。")
+    else:  # 条件なしでelseを使う
+        print(f"データセットは{len(hashes)}枚に削減されました。")
 
 if __name__ == "__main__":
     main()
