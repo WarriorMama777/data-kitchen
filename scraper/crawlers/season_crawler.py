@@ -10,35 +10,34 @@ class SeasonCrawler:
     def __init__(self, url):
         self.url = url
         self.name = None
-        self.current_url = None  # current_url を None に初期化
+        self.current_url = None
         self.page = 1
         self.max_retries = 3
 
     def crawl(self):
         ep_links = []
-        pic_links = []
-        self.current_url = self.url  # current_url を URL に設定
+        self.current_url = self.url
         with tqdm(total=self.max_retries) as pbar:
             while self.current_url:
                 retries = 0
                 while retries < self.max_retries:
                     try:
                         headers = {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; rv:124.0) Gecko/20100101 Firefox/124.0'
                         }
                         response = requests.get(self.current_url, headers=headers)
-                        response.raise_for_status()  # HTTP エラーがあった場合に例外を送出
+                        response.raise_for_status()
                         break
                     except requests.exceptions.RequestException as e:
-                        Colors.print(f"Error occurred while opening the URL: {e}", Colors.RED)
+                        Colors.print(f"Error opening URL: {e}", Colors.RED)
                         retries += 1
-                        time.sleep(2 ** retries)  # 指数バックオフでリトライ間隔を設定
+                        time.sleep(2 ** retries)
                         if retries >= self.max_retries:
                             Colors.print(f"Max retries reached. Skipping {self.current_url}", Colors.YELLOW)
                             self.current_url = None
                             break
                     finally:
-                        pbar.update(1)  # 進行状況バーを更新
+                        pbar.update(1)
 
                 content = response.content
                 beautiful_soup = self.parse_content(content)
@@ -48,11 +47,23 @@ class SeasonCrawler:
                 self.current_url = self.get_next_page_url(beautiful_soup)
                 self.page += 1
 
-        # エピソード リンクをクロールして画像リンクを取得する
-        pic_links = self.crawl_episode_links(ep_links)
+                # エピソード リンクをクロールしてダウンロードする
+                if ep_links:
+                    self.download_episode(ep_links.pop(0))
 
-        return pic_links
+            Colors.print(f"{self.url} crawling and downloading finished.", Colors.YELLOW)
 
+    def download_episode(self, ep_link):
+        crawler = episode_crawler.EpisodeCrawler()
+        episode_result = crawler.crawl(ep_link)
+        pic_links = episode_result['links']
+
+        # ダウンローダークラスをインポート
+        from scraper.downloader import Downloader
+
+        downloader = Downloader()
+        downloader.downloadUrls("path/to/output/directory", pic_links)
+        
     def parse_content(self, content):
         try:
             return BeautifulSoup(content, 'html.parser')
