@@ -5,20 +5,18 @@ from scraper.utils.colors import Colors
 import os
 
 parser = argparse.ArgumentParser()
-parser.add_argument('url', nargs='?', help='Url to start scraping')
-parser.add_argument('--output', type=str, default="Downloads", help='Path of the output folder')
+parser.add_argument('url', nargs='?', help='Url to start download')
+parser.add_argument('--output', type=str, default="Downloads", help='Path of folder')
 args = parser.parse_args()
 
 if __name__ == "__main__":
+    # Crawl
     crawler = Crawler()
+    links = crawler.crawl(args.url)
+
+    # Download
     downloader = Downloader()
-
-    # Crawl and download each episode sequentially
-    episode_links = []
-    for episode_url in crawler.crawl_season_episodes(args.url):
-        episode_links.extend(episode_url['links'])
-        Colors.print(f"Crawled episode: {episode_url['subfolder']}", Colors.GREEN)
-
-        # Download episode immediately after crawling
-        downloader.download_episode(args.output, episode_url['subfolder'], episode_url['links'])
-        Colors.print(f"Downloaded episode: {episode_url['subfolder']}", Colors.GREEN)
+    for item in links:
+        Colors.print(f"Download to {item['subfolder']} started:", Colors.YELLOW)
+        path = os.path.join(args.output, item['subfolder'])
+        downloader.downloadUrls(path, item['links'])
