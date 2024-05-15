@@ -4,10 +4,12 @@ import re
 import urllib.request
 import urllib.error
 from scraper.utils.colors import Colors
+import time
 
 class SeasonCrawler:
     url = None
     name = None
+    max_retries = 3  # 最大リトライ回数
 
     def crawl(self, url):
         epLinks = []
@@ -17,14 +19,24 @@ class SeasonCrawler:
         page = 1
 
         while currentUrl:
-            try:
-                request = urllib.request.Request(currentUrl, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0'})
-                content = urllib.request.urlopen(request)
-            except urllib.error.URLError as e:
-                Colors.print(f"Error occurred while opening the URL: {e.reason}", Colors.RED)
-                break
-            except urllib.error.HTTPError as e:
-                Colors.print(f"HTTP Error: {e.code} {e.reason}", Colors.RED)
+            attempt = 0
+            while attempt < self.max_retries:
+                try:
+                    request = urllib.request.Request(currentUrl, headers={'User-Agent': 'Mozilla/5.0'})
+                    content = urllib.request.urlopen(request)
+                    # ページの読み込みに成功したらリトライループを抜ける
+                    break
+                except urllib.error.URLError as e:
+                    Colors.print(f"Error occurred while opening the URL: {e.reason} - Retrying {attempt+1}/{self.max_retries}", Colors.RED)
+                    attempt += 1
+                    time.sleep(1)  # リトライ間に少し待つ
+                except urllib.error.HTTPError as e:
+                    Colors.print(f"HTTP Error: {e.code} {e.reason} - Retrying {attempt+1}/{self.max_retries}", Colors.RED)
+                    attempt += 1
+                    time.sleep(1)
+            if attempt == self.max_retries:
+                # 最大リトライ回数に達した場合、次のURLへ移行
+                Colors.print("Max retries reached. Skipping to next URL.", Colors.YELLOW)
                 break
 
             try:
@@ -53,11 +65,19 @@ class SeasonCrawler:
 
         crawler = episode_crawler.EpisodeCrawler()
         for epLink in epLinks:
-            try:
-                episodeResult = crawler.crawl(epLink)
-                picLinks.append(episodeResult)
-                Colors.print(f"\t{epLink} crawled", Colors.GREEN)
-            except Exception as e:
-                Colors.print(f"Failed to crawl {epLink}: {e}", Colors.RED)
+            attempt = 0
+            while attempt < self.max_retries:
+                try:
+                    episodeResult = crawler.crawl(epLink)
+                    picLinks.append(episodeResult)
+                    Colors.print(f"\t{epLink} crawled", Colors.GREEN)
+                    # 成功したら次へ
+                    break
+                except Exception as e:
+                    Colors.print(f"Failed to crawl {epLink}: {e} - Retrying {attempt+1}/{self.max_retries}", Colors.RED)
+                    attempt += 1
+                    time.sleep(1)  # リトライ間に少し待つ
+            if attempt == self.max_retries:
+                Colors.print(f"Max retries reached for {epLink}. Skipping.", Colors.YELLOW)
 
         return picLinks
