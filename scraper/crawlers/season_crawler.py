@@ -1,83 +1,85 @@
+import requests
 from bs4 import BeautifulSoup
 from scraper.crawlers import episode_crawler
 import re
-import urllib.request
-import urllib.error
 from scraper.utils.colors import Colors
 import time
 
 class SeasonCrawler:
     url = None
     name = None
-    max_retries = 3  # 最大リトライ回数
 
     def crawl(self, url):
-        epLinks = []
-        picLinks = []
+        ep_links = []
+        pic_links = []
         self.url = url
-        currentUrl = self.url
+        current_url = self.url
         page = 1
+        max_retries = 3  # リトライの最大回数
 
-        while currentUrl:
-            attempt = 0
-            while attempt < self.max_retries:
+        while current_url:
+            retries = 0
+            while retries < max_retries:
                 try:
-                    request = urllib.request.Request(currentUrl, headers={'User-Agent': 'Mozilla/5.0'})
-                    content = urllib.request.urlopen(request)
-                    # ページの読み込みに成功したらリトライループを抜ける
+                    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0'}
+                    response = requests.get(current_url, headers=headers)
+                    response.raise_for_status()  # HTTP エラーがあった場合に例外を送出
                     break
-                except urllib.error.URLError as e:
-                    Colors.print(f"Error occurred while opening the URL: {e.reason} - Retrying {attempt+1}/{self.max_retries}", Colors.RED)
-                    attempt += 1
-                    time.sleep(1)  # リトライ間に少し待つ
-                except urllib.error.HTTPError as e:
-                    Colors.print(f"HTTP Error: {e.code} {e.reason} - Retrying {attempt+1}/{self.max_retries}", Colors.RED)
-                    attempt += 1
-                    time.sleep(1)
-            if attempt == self.max_retries:
-                # 最大リトライ回数に達した場合、次のURLへ移行
-                Colors.print("Max retries reached. Skipping to next URL.", Colors.YELLOW)
-                break
+                except requests.exceptions.RequestException as e:
+                    Colors.print(f"Error occurred while opening the URL: {e}", Colors.RED)
+                    retries += 1
+                    time.sleep(2 ** retries)  # 指数バックオフでリトライ間隔を設定
+                    if retries >= max_retries:
+                        Colors.print(f"Max retries reached. Skipping {current_url}", Colors.YELLOW)
+                        current_url = None
+                        break
+
+            content = response.content
 
             try:
-                beautifulSoup = BeautifulSoup(content, 'html.parser')
+                beautiful_soup = BeautifulSoup(content, 'html.parser')
             except Exception as e:
                 Colors.print(f"Error occurred while parsing the page: {e}", Colors.RED)
                 break
 
-            for DOMLink in beautifulSoup.find_all('a', class_='btn', href=re.compile("^.*?/episodeimages.php\?")):
-                href = DOMLink.get('href')
+            # ページ内のリンクをクロールする
+            for dom_link in beautiful_soup.find_all('a', class_='btn', href=re.compile("^.*?/episodeimages.php\?")):
+                href = dom_link.get('href')
                 if href:
-                    if not re.match("^https://.*?/episodeimages.php\?", href):
-                        href = 'https://fancaps.net' + DOMLink.get('href')
-
+                    href = re.sub("^https?://", "https://", href)  # URL の正規化
                     match = re.search(r"https://fancaps.net/.*?/episodeimages.php\?\d+-(.*?)/", href)
                     if match:
                         if not self.name:
                             self.name = match.group(1)
                         if self.name == match.group(1):
-                            epLinks.append(href)
-            if beautifulSoup.find("a", text=re.compile(r'Next', re.IGNORECASE), href=lambda href: href and href != "#"):
-                page += 1
-                currentUrl = url + f"&page={page}"
-            else:
-                currentUrl = None
+                            ep_links.append(href)
 
+            # 次のページへのリンクを確認する
+            next_link = beautiful_soup.find("a", text=re.compile(r'Next', re.IGNORECASE), href=lambda href: href and href != "#")
+            if next_link:
+                page += 1
+                current_url = url + f"&page={page}"
+            else:
+                current_url = None
+
+        # エピソード リンクをクロールして画像リンクを取得する
         crawler = episode_crawler.EpisodeCrawler()
-        for epLink in epLinks:
-            attempt = 0
-            while attempt < self.max_retries:
+        for ep_link in ep_links:
+            retries = 0
+            while retries < max_retries:
                 try:
-                    episodeResult = crawler.crawl(epLink)
-                    picLinks.append(episodeResult)
-                    Colors.print(f"\t{epLink} crawled", Colors.GREEN)
-                    # 成功したら次へ
+                    episode_result = crawler.crawl(ep_link)
+                    pic_links.append(episode_result)
+                    Colors.print(f"\t{ep_link} crawled", Colors.GREEN)
                     break
                 except Exception as e:
-                    Colors.print(f"Failed to crawl {epLink}: {e} - Retrying {attempt+1}/{self.max_retries}", Colors.RED)
-                    attempt += 1
-                    time.sleep(1)  # リトライ間に少し待つ
-            if attempt == self.max_retries:
-                Colors.print(f"Max retries reached for {epLink}. Skipping.", Colors.YELLOW)
+                    Colors.print(f"Failed to crawl {ep_link}. Retrying... ({retries+1}/{max_retries})", Colors.YELLOW)
+                    retries += 1
+                    time.sleep(2 ** retries)  # 指数バックオフでリトライ間隔を設定
+                    if retries >= max_retries:
+                        Colors.print(f"Max retries reached. Skipping {ep_link}", Colors.RED)
 
-        return picLinks
+            # 最大リトライ回数に達した場合はエラーとして扱い、次のリンクに進む
+            # ...
+
+        return pic_links
