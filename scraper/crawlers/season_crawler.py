@@ -4,19 +4,20 @@ from scraper.crawlers import episode_crawler
 import re
 from scraper.utils.colors import Colors
 import time
-from tqdm import tqdm  # 進行状況バーを表示するために tqdm をインポート
+from tqdm import tqdm
 
 class SeasonCrawler:
     def __init__(self, url):
         self.url = url
         self.name = None
-        self.current_url = url
+        self.current_url = None  # current_url を None に初期化
         self.page = 1
         self.max_retries = 3
 
     def crawl(self):
         ep_links = []
         pic_links = []
+        self.current_url = self.url  # current_url を URL に設定
         with tqdm(total=self.max_retries) as pbar:
             while self.current_url:
                 retries = 0
@@ -104,6 +105,7 @@ class SeasonCrawler:
         return pic_links
 
 # 使用例
-crawler = SeasonCrawler(url="https://fancaps.net/anime/showimages.php?39590-_Tis_Time_for_Torture__Princess")
+url = "https://fancaps.net/anime/showimages.php?22442-Zombie_Land_Saga_Revenge"
+crawler = SeasonCrawler(url=url)
 pic_links = crawler.crawl()
 print(pic_links)
