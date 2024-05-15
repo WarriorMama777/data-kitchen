@@ -23,7 +23,7 @@ def main():
     parser.add_argument("--recursive", action='store_true', help="サブディレクトリを再帰的に検索 / Search subdirectories recursively")
     parser.add_argument("-v", "--verbose", action='store_true', help="冗長な情報を表示 / Display verbose information")
     parser.add_argument("--debug", action='store_true', help="デバッグモードを有効にします / Enable debug mode")
-    parser.add_argument("--threshold", type=int, default=5, help="画像類似度の判定のしきい値 / Threshold for image similarity judgement")
+    parser.add_argument("--threshold", type=int, default=5, help="画像類似度の判定のしきい値。この値を増やすとより削減されるようになります。 / Threshold for image similarity judgement")
     args = parser.parse_args()
 
     if not os.path.exists(args.save_dir):
@@ -37,7 +37,7 @@ def main():
     hashes: Dict[int, List[str]] = {}
 
     # tqdmのdisableオプションを変更して、常に進行状況バーを表示します。
-    for imagePath in tqdm(imagePathList, desc="画像の解析を行っています"):
+    for imagePath in tqdm(imagePathList, desc="画像解析中 / Analyzing images"):
         if args.verbose or args.debug:  # verboseまたはdebugモードが有効な場合に詳細情報を表示
             print(f"Debug: 画像を処理する予定です {imagePath}")
 
@@ -68,11 +68,11 @@ def main():
 
     # 最終的なメッセージを表示
     if args.debug:
-        print(f"データセットは{len(hashes)}枚に削減されます。")
+        print(f"データセットは{len(hashes)}枚に削減されます。 / Datasets reduced to {len(hashes)} images.")
     elif args.verbose:
-        print(f"データセットは{len(hashes)}枚に削減されました。")
+        print(f"データセットは{len(hashes)}枚に削減されました。 / Datasets was reduced to {len(hashes)} images.")
     else:
-        print(f"データセットは{len(hashes)}枚に削減されました。")
+        print(f"データセットは{len(hashes)}枚に削減されました。/ Datasets was reduced to {len(hashes)} images.")
 
 if __name__ == "__main__":
     main()

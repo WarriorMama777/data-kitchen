@@ -4,3 +4,4 @@ example/
 test/
 gallery-dl/
 trash/
+**/__pycache__/
