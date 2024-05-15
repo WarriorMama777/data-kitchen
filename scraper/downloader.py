@@ -6,6 +6,7 @@ from urllib.request import urlopen, Request
 from tqdm import tqdm
 import time
 from http.client import IncompleteRead  # Import IncompleteRead exception
+from scraper.utils.colors import Colors
 
 def _download(url, path, timeout=10, attempts=3, delay=0.01):  # Added attempts parameter
     req = Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0'})
@@ -53,3 +54,26 @@ class Downloader:
                 for future in concurrent.futures.as_completed(futures):
                     future.result()
 
+    def download_episode(self, output_folder, subfolder, episode_links, delay=1):
+            episode_path = os.path.join(output_folder, subfolder)
+            os.makedirs(episode_path, exist_ok=True)
+
+            total = len(episode_links)
+            lock = threading.Lock()
+
+            def update_progress():
+                with lock:
+                    pbar.update(1)
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                with tqdm(total=total) as pbar:
+                    futures = []
+                    for url in episode_links:
+                        future = executor.submit(_download, url, episode_path, delay=delay)  # delay パラメーターを追加
+                        future.add_done_callback(lambda _: update_progress())
+                        futures.append(future)
+
+                    for future in concurrent.futures.as_completed(futures):
+                        future.result()
+
+            Colors.print(f"Episode {subfolder} downloaded successfully.", Colors.GREEN)

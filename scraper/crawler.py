@@ -39,6 +39,27 @@ class Crawler:
         else:
             # リトライが最大回数に達した場合
             Colors.print(f"Failed to crawl {url} after {max_retries} attempts.", Colors.RED)
+ 
+    def crawl_season_episodes(self, url, max_retries=3, delay=2):
+            Colors.print(f"{url} season episode crawling started:", Colors.YELLOW)
 
-        Colors.print(f"{url} crawling finished.", Colors.YELLOW)
-        return output
+            url_support = UrlSupport()
+            if url_support.getType(url) != 'season':
+                Colors.print(f"Unsupported URL type: {url_support.getType(url)}", Colors.RED)
+                return []
+
+            retries = 0
+            season_episodes = []
+            while retries < max_retries:
+                try:
+                    crawler = season_crawler.SeasonCrawler()
+                    season_episodes = crawler.crawl(url)
+                    break
+                except Exception as e:
+                    retries += 1
+                    Colors.print(f"An error occurred during crawling: {e}", Colors.RED)
+                    Colors.print(f"Retrying... ({retries}/{max_retries})", Colors.YELLOW)
+                    time.sleep(delay)
+
+            Colors.print(f"{url} season episode crawling finished.", Colors.YELLOW)
+            return season_episodes
