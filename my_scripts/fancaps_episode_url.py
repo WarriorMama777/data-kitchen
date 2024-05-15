@@ -17,6 +17,12 @@ def fetch_episode_urls(anime_url, headers, verbose):
                 print(f"URL: {anime_url} | Error: {e}")
             break
         soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # <div class="right_bar">要素を削除
+        right_bar = soup.find('div', class_='right_bar')
+        if right_bar:
+            right_bar.decompose()  # もしくは right_bar.extract() を使用
+        
         links = soup.find_all('a', href=True)
         found_new_link = False
         for link in links:
