@@ -61,6 +61,13 @@ def main():
         all_episode_urls.extend(episode_urls)
 
     output_path = os.path.join(args.save_dir, "episode_urls.txt")
+    # 既存のファイルと同じ名前がある場合は、一意のファイル名を生成する
+    base_filename, file_extension = os.path.splitext(output_path)
+    counter = 1
+    while os.path.exists(output_path):
+        output_path = f"{base_filename}_{counter}{file_extension}"
+        counter += 1
+
     with open(output_path, 'w') as file:
         for url in all_episode_urls:
             file.write(f"{url}\n")
