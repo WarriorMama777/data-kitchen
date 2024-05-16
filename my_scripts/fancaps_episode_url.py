@@ -68,7 +68,7 @@ def main():
         output_path = f"{base_filename}_{counter}{file_extension}"
         counter += 1
 
-    with open(output_path, 'w') as file:
+    with open(output_path, 'w', encoding='utf-8') as file:  # ここでエンコーディングを指定
         for url in all_episode_urls:
             file.write(f"{url}\n")
 
