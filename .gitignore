@@ -5,3 +5,5 @@ test/
 gallery-dl/
 trash/
 **/__pycache__/
+no_trace/
+download/

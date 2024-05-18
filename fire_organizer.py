@@ -3,8 +3,31 @@ import os
 from pathlib import Path
 import shutil
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 
-def organize_files(src_dir, dest_dir, extensions, file_name, preserve_structure, action, debug_mode):
+def try_operation(src_path, dest_path, action, retries=3, delay=1):
+    for attempt in range(retries):
+        try:
+            if action == "copy":
+                shutil.copy2(src_path, dest_path)
+            elif action == "cut":
+                shutil.move(src_path, dest_path)
+            return True
+        except Exception as e:
+            print(f"エラー: {e} リトライします... ({attempt+1}/{retries})")
+            time.sleep(delay)
+    return False
+
+def process_file(args):
+    src_path, dest_path, action, debug_mode = args
+    if debug_mode:
+        operation = "コピー" if action == "copy" else "切り取り"
+        print(f"[デバッグ] {operation}: {src_path} -> {dest_path}")
+    else:
+        return try_operation(src_path, dest_path, action)
+
+def organize_files(src_dir, dest_dir, extensions, file_name, preserve_structure, action, debug_mode, threads):
     if not Path(src_dir).exists():
         print(f"指定されたディレクトリが存在しません: {src_dir}")
         return
@@ -22,26 +45,20 @@ def organize_files(src_dir, dest_dir, extensions, file_name, preserve_structure,
                 continue
             if file_name and file_name not in file:
                 continue
-            files_to_process.append((root, file))
+            src_path = Path(root) / file
+            if preserve_structure:
+                relative_path = src_path.relative_to(src_dir)
+                dest_path = Path(dest_dir) / relative_path
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
+            else:
+                dest_path = Path(dest_dir) / file
+            files_to_process.append((src_path, dest_path, action, debug_mode))
 
-    # 処理状況を表示
-    for root, file in tqdm(files_to_process, desc="ファイルの整頓中"):
-        src_path = Path(root) / file
-        if preserve_structure:
-            relative_path = src_path.relative_to(src_dir)
-            dest_path = Path(dest_dir) / relative_path
-            dest_path.parent.mkdir(parents=True, exist_ok=True)
-        else:
-            dest_path = Path(dest_dir) / file
-
-        if debug_mode:
-            operation = "コピー" if action == "copy" else "切り取り"
-            print(f"[デバッグ] {operation}: {src_path} -> {dest_path}")
-        else:
-            if action == "copy":
-                shutil.copy2(src_path, dest_path)
-            elif action == "cut":
-                shutil.move(src_path, dest_path)
+    # マルチスレッドで処理
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        futures = [executor.submit(process_file, args) for args in files_to_process]
+        for _ in tqdm(as_completed(futures), total=len(futures), desc="ファイルの整頓中"):
+            pass
 
 def main():
     parser = argparse.ArgumentParser(description="指定したディレクトリ下のファイルを整頓するスクリプト")
@@ -54,11 +71,12 @@ def main():
     parser.add_argument("--save", type=str, required=True, help="処理対象ファイルを保存するディレクトリ")
     parser.add_argument("--preserve_structure", action="store_true", help="ディレクトリの構造を保持してファイルを保存します")
     parser.add_argument("--debug", action="store_true", help="デバッグ情報を表示します")
+    parser.add_argument("--threads", type=int, default=4, help="使用するスレッド数")
 
     args = parser.parse_args()
 
     action = "copy" if args.copy else "cut"
-    organize_files(args.dir, args.save, args.extensions, args.file_name, args.preserve_structure, action, args.debug)
+    organize_files(args.dir, args.save, args.extensions, args.file_name, args.preserve_structure, action, args.debug, args.threads)
 
 if __name__ == "__main__":
     main()
