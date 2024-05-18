@@ -1,124 +1,133 @@
 import argparse
 import os
-import re  # 正規表現モジュールをインポート
+import re
 import sys
+from tqdm import tqdm
 
-def rename_files(args):
-    # 引数がdir以外に指定されていないかチェック
-    if all(value is None for key, value in vars(args).items() if key != "dir"):
-        print("警告: どのオプションも指定されていません。ファイル名は変更されません。")
-        return
-    
-    directory = args.dir
-    if not os.path.isdir(directory):
+def rename_files(directory, args, is_recursive=False, level=0):
+    try:
+        files = os.listdir(directory)
+    except FileNotFoundError:
         print(f"指定されたディレクトリが存在しません: {directory}")
+        os.makedirs(directory)
+        print(f"ディレクトリを作成しました: {directory}")
         return
-    files = os.listdir(directory)
+    except Exception as e:
+        print(f"ディレクトリの読み込み中にエラーが発生しました: {e}")
+        return
+
     file_count = len(files)
     num_length = len(str(file_count))
 
-    for i, filename in enumerate(files, start=1):
+    for i, filename in enumerate(tqdm(files, desc="Processing"), start=1):
         old_path = os.path.join(directory, filename)
+        if os.path.isdir(old_path) and not args.folder:
+            if is_recursive:
+                rename_files(old_path, args, is_recursive=True, level=level + 1)
+            continue
+        elif not os.path.isdir(old_path) and not args.file:
+            continue
+
         if os.path.isdir(old_path):
-            # ディレクトリの場合、拡張子を操作せずに処理を続行
             extension = ""
             base_name = filename
         else:
-            # 拡張子を取得し、ファイル名から拡張子を除く
             base_name, extension = os.path.splitext(filename)
         
-        new_name = base_name
+        new_name = modify_name(i, base_name, num_length, args) + extension
 
-        if args.del_first:
-            new_name = new_name[args.del_first:]
-
-        if args.del_last:
-            new_name = new_name[:-args.del_last]
-
-        if args.add_first:
-            new_name = args.add_first + new_name
-
-        if args.add_last:
-            new_name = new_name + args.add_last
-
-        if args.add_number_first:
-            new_name = f"{i:0{num_length}d}_" + new_name
-
-        if args.add_number_last:
-            new_name = new_name + f"_{i:0{num_length}d}"
-
-        # --replaceオプションの処理
-        if args.replace:
-            old, new = args.replace
-            # スペース、コンマ、ドットを含む可能性がある部分を正規表現でマッチさせるパターンに変更
-            # エスケープが必要な特殊文字自体はエスケープしつつ、スペース、コンマ、ドットの連続を考慮
-            old_pattern = re.sub(r'\\([\ ,\.])', r'[\ \.,]+', re.escape(old))
-            pattern = re.compile(old_pattern)
-            new_name = pattern.sub(new, new_name)
-
-        # 指定した文字以降を削除
-        if args.del_after:
-            pos = new_name.find(args.del_after)
-            if pos != -1:
-                new_name = new_name[:pos + len(args.del_after)]
-
-        # 指定した文字以前を削除
-        if args.del_before:
-            pos = new_name.find(args.del_before)
-            if pos != -1:
-                new_name = new_name[pos:]
-
-        # 指定した文字の後ろに文字を追加
-        if args.add_after:
-            search_str, add_str = args.add_after.split(",")
-            pos = new_name.find(search_str)
-            if pos != -1:
-                new_name = new_name[:pos + len(search_str)] + add_str + new_name[pos + len(search_str):]
-
-        # 指定した文字の前に文字を追加
-        if args.add_before:
-            search_str, add_str = args.add_before.split(",")
-            pos = new_name.find(search_str)
-            if pos != -1:
-                new_name = new_name[:pos] + add_str + new_name[pos:]
-
-        # --reg_delの処理
-        if args.reg_del:
-            pattern = re.compile(args.reg_del)
-            new_name = pattern.sub('', new_name)
-
-        # --reg_del_aroundの処理
-        if args.reg_del_around:
-            pattern = re.compile(args.reg_del_around)
-            match = pattern.search(new_name)
-            if match:
-                new_name = new_name[match.start():match.end()]
-            else:
-                # マッチしなかった場合はファイル名を変更しない
-                new_name = filename
-
-        # 最後に拡張子を再度付加
-        new_name += extension
-
-        # デバッグモードが有効の場合は、ファイル名の変更を行わずに情報のみを表示
+        if new_name != filename:
+            new_path = os.path.join(directory, new_name)
+            try:
+                os.rename(old_path, new_path)
+                print(f"'{filename}' を '{new_name}' に変更しました。")
+            except Exception as e:
+                print(f"ファイル名の変更中にエラーが発生しました: {e}")
+        
+         # デバッグモードが有効の場合は、ファイル名の変更を行わずに情報のみを表示
         if args.debug:
             print(f"デバッグモード: '{filename}' から '{new_name}' への変更をシミュレートします。")
             continue  # 処理をスキップ
 
-        if new_name != filename:
-            old_path = os.path.join(directory, filename)
-            new_path = os.path.join(directory, new_name)
+def modify_name(index, base_name, num_length, args):
+    new_name = base_name
 
-            try:
-                os.rename(old_path, new_path)
-            except Exception as e:
-                print(f"ファイル名の変更中にエラーが発生しました: {e}")
-            else:
-                print(f"'{filename}' を '{new_name}' に変更しました。")
+    if args.del_first:
+        new_name = new_name[args.del_first:]
+
+    if args.del_last:
+        new_name = new_name[:-args.del_last]
+
+    if args.add_first:
+        new_name = args.add_first + new_name
+
+    if args.add_last:
+        new_name = new_name + args.add_last
+
+    if args.add_number_first:
+        new_name = f"{i:0{num_length}d}_" + new_name
+
+    if args.add_number_last:
+        new_name = new_name + f"_{i:0{num_length}d}"
+
+    # --replaceオプションの処理
+    if args.replace:
+        old, new = args.replace
+        # スペース、コンマ、ドットを含む可能性がある部分を正規表現でマッチさせるパターンに変更
+        # エスケープが必要な特殊文字自体はエスケープしつつ、スペース、コンマ、ドットの連続を考慮
+        old_pattern = re.sub(r'\\([\ ,\.])', r'[\ \.,]+', re.escape(old))
+        pattern = re.compile(old_pattern)
+        new_name = pattern.sub(new, new_name)
+
+    # 指定した文字以降を削除
+    if args.del_after:
+        pos = new_name.find(args.del_after)
+        if pos != -1:
+            new_name = new_name[:pos + len(args.del_after)]
+
+    # 指定した文字以前を削除
+    if args.del_before:
+        pos = new_name.find(args.del_before)
+        if pos != -1:
+            new_name = new_name[pos:]
+
+    # 指定した文字の後ろに文字を追加
+    if args.add_after:
+        search_str, add_str = args.add_after.split(",")
+        pos = new_name.find(search_str)
+        if pos != -1:
+            new_name = new_name[:pos + len(search_str)] + add_str + new_name[pos + len(search_str):]
+
+    # 指定した文字の前に文字を追加
+    if args.add_before:
+        search_str, add_str = args.add_before.split(",")
+        pos = new_name.find(search_str)
+        if pos != -1:
+            new_name = new_name[:pos] + add_str + new_name[pos:]
+
+    # --reg_delの処理
+    if args.reg_del:
+        pattern = re.compile(args.reg_del)
+        new_name = pattern.sub('', new_name)
+
+    # --reg_del_aroundの処理
+    if args.reg_del_around:
+        pattern = re.compile(args.reg_del_around)
+        match = pattern.search(new_name)
+        if match:
+            new_name = new_name[match.start():match.end()]
+        else:
+            # マッチしなかった場合はファイル名を変更しない
+            new_name = filename
+
+    return new_name
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ファイル名を変更するスクリプト")
     parser.add_argument("--dir", type=str, required=True, help="作業対象のディレクトリ")
+    parser.add_argument("--folder", action='store_true', help="フォルダ名のみを対象にする")
+    parser.add_argument("--file", action='store_true', help="ファイル名のみを対象にする")
+    parser.add_argument("--recursive", action='store_true', help="サブディレクトリ含め全てのファイル/フォルダを対象にする")
     parser.add_argument("--del_first", type=int, help="先頭の文字を指定された数だけ削除")
     parser.add_argument("--del_last", type=int, help="末尾の文字を指定された数だけ削除")
     parser.add_argument("--add_first", type=str, help="先頭に文字を追加")
@@ -136,4 +145,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    rename_files(args)
+    if args.recursive:
+        rename_files(args.dir, args, is_recursive=True)
+    else:
+        rename_files(args.dir, args)
