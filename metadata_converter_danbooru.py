@@ -5,7 +5,7 @@ from pathlib import Path
 from tqdm import tqdm
 import time  # デバッグ用の時間計測やリトライ間隔に使用
 
-def process_directory(directory_path, save_dir, metadata_order, insert_custom_texts=None, debug=False):
+def process_directory(directory_path, save_dir, metadata_order, save_extension='txt', insert_custom_texts=None, debug=False):
     print(f"{directory_path} 内のファイルを処理中...")
     for root, dirs, files in tqdm(os.walk(directory_path)):
         relative_path = os.path.relpath(root, directory_path)
@@ -16,11 +16,11 @@ def process_directory(directory_path, save_dir, metadata_order, insert_custom_te
             if file_name.endswith('.txt') or file_name.endswith('.json'):
                 file_path = os.path.join(root, file_name)
                 if debug:
-                    print(f"[デバッグ] 処理するファイル: {file_path} -> 保存先: {current_save_dir}")
+                    print(f"[デバッグ] 処理するファイル: {file_path} -> 保存先: {current_save_dir}.{save_extension}")
                 else:
-                    process_file(file_path, current_save_dir, metadata_order, insert_custom_texts)
+                    process_file(file_path, current_save_dir, metadata_order, save_extension, insert_custom_texts)
 
-def process_file(file_path, save_dir, metadata_order, insert_custom_texts=None):
+def process_file(file_path, save_dir, metadata_order, save_extension='txt', insert_custom_texts=None):
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             metadata = json.load(file)
@@ -44,7 +44,7 @@ def process_file(file_path, save_dir, metadata_order, insert_custom_texts=None):
             extracted_data.insert(index, text)
 
     output_content = ','.join(filter(None, extracted_data))
-    output_file_path = os.path.join(save_dir, os.path.basename(file_path))
+    output_file_path = os.path.join(save_dir, os.path.splitext(os.path.basename(file_path))[0] + f'.{save_extension}')
 
     with open(output_file_path, 'w', encoding='utf-8') as output_file:
         output_file.write(output_content)
@@ -57,12 +57,13 @@ def main():
     parser.add_argument('--metadata_order', nargs='+', help='Order of metadata labels to extract. Format: --metadata_order "METADATA_LABEL" "METADATA_LABEL"', required=True)
     parser.add_argument('--insert_custom_text', nargs='*', help='Insert custom texts at specified indexes in the output. Format: --insert_custom_text INDEX "CUSTOM_TEXT" INDEX "CUSTOM_TEXT" ...', required=False)
     parser.add_argument('--debug', action='store_true', help='Enable debug mode to display processing logs without making actual changes.')
+    parser.add_argument('--save_extension', type=str, default='txt', help='Extension of the output file. Default is "txt".', required=False)
 
     args = parser.parse_args()
 
     Path(args.save).mkdir(parents=True, exist_ok=True)
 
-    process_directory(args.dir, args.save, args.metadata_order, args.insert_custom_text, args.debug)
+    process_directory(args.dir, args.save, args.metadata_order, args.save_extension, args.insert_custom_text, args.debug)
 
 if __name__ == '__main__':
     main()
