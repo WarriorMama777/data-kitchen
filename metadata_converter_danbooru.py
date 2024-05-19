@@ -1,10 +1,16 @@
 import argparse
 import json
 import os
+import signal
+import sys
 from pathlib import Path
 from tqdm import tqdm
 import time
-from multiprocessing import Pool, cpu_count  # マルチプロセッシングのためのライブラリをインポート
+from multiprocessing import Pool, cpu_count
+
+def signal_handler(sig, frame):
+    print('終了シグナルを受信しました。クリーンアップを行います。')
+    sys.exit(0)
 
 def process_file_wrapper(args):
     return process_file(*args)
@@ -80,6 +86,9 @@ def process_directory(directory_path, save_dir, metadata_order, save_extension='
         print("全データをメモリから一括で保存しました。")
 
 def main():
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
     parser = argparse.ArgumentParser(description='Convert Danbooru metadata files to plain text format.')
     parser.add_argument('--dir', type=str, help='Directory containing metadata files', required=True)
     parser.add_argument('--save', type=str, help='Directory to save converted files', required=True)
@@ -94,7 +103,12 @@ def main():
 
     Path(args.save).mkdir(parents=True, exist_ok=True)
 
-    process_directory(args.dir, args.save, args.metadata_order, args.save_extension, args.insert_custom_text, args.debug, mem_cache=args.mem_cache == 'ON', threads=args.threads)
+    try:
+        process_directory(args.dir, args.save, args.metadata_order, args.save_extension, args.insert_custom_text, args.debug, mem_cache=args.mem_cache == 'ON', threads=args.threads)
+    except Exception as e:
+        print(f"予期せぬエラーが発生しました: {e}")
+    finally:
+        print("プログラムを終了します。")
 
 if __name__ == '__main__':
     main()
