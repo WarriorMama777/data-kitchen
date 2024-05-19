@@ -5,8 +5,10 @@ from pathlib import Path
 from tqdm import tqdm
 import time  # デバッグ用の時間計測やリトライ間隔に使用
 
-def process_directory(directory_path, save_dir, metadata_order, save_extension='txt', insert_custom_texts=None, debug=False):
+def process_directory(directory_path, save_dir, metadata_order, save_extension='txt', insert_custom_texts=None, debug=False, mem_cache=True):
     print(f"{directory_path} 内のファイルを処理中...")
+    cache = []  # メモリキャッシュ用のリスト
+
     for root, dirs, files in tqdm(os.walk(directory_path)):
         relative_path = os.path.relpath(root, directory_path)
         current_save_dir = os.path.join(save_dir, relative_path)
@@ -18,15 +20,24 @@ def process_directory(directory_path, save_dir, metadata_order, save_extension='
                 if debug:
                     print(f"[デバッグ] 処理するファイル: {file_path} -> 保存先: {current_save_dir}.{save_extension}")
                 else:
-                    process_file(file_path, current_save_dir, metadata_order, save_extension, insert_custom_texts)
+                    processed_data = process_file(file_path, metadata_order, save_extension, insert_custom_texts)
+                    if mem_cache:
+                        cache.append((current_save_dir, os.path.splitext(os.path.basename(file_path))[0] + f'.{save_extension}', processed_data))
+                    else:
+                        save_processed_data(current_save_dir, os.path.splitext(os.path.basename(file_path))[0] + f'.{save_extension}', processed_data)
 
-def process_file(file_path, save_dir, metadata_order, save_extension='txt', insert_custom_texts=None):
+    if mem_cache:
+        for save_dir, file_name, data in cache:
+            save_processed_data(save_dir, file_name, data)
+        print("全データをメモリから一括で保存しました。")
+
+def process_file(file_path, metadata_order, save_extension='txt', insert_custom_texts=None):
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             metadata = json.load(file)
     except json.JSONDecodeError:
         print(f"Warning: Skipping file due to JSONDecodeError: {file_path}")
-        return
+        return None
 
     extracted_data = []
     for key in metadata_order:
@@ -44,11 +55,14 @@ def process_file(file_path, save_dir, metadata_order, save_extension='txt', inse
             extracted_data.insert(index, text)
 
     output_content = ','.join(filter(None, extracted_data))
-    output_file_path = os.path.join(save_dir, os.path.splitext(os.path.basename(file_path))[0] + f'.{save_extension}')
+    return output_content
 
-    with open(output_file_path, 'w', encoding='utf-8') as output_file:
-        output_file.write(output_content)
-    print(f"Processed: {file_path} -> {output_file_path}")
+def save_processed_data(save_dir, file_name, data):
+    if data is not None:  # JSONDecodeErrorでスキップしたファイルを除外
+        output_file_path = os.path.join(save_dir, file_name)
+        with open(output_file_path, 'w', encoding='utf-8') as output_file:
+            output_file.write(data)
+        print(f"Processed: {output_file_path}")
 
 def main():
     parser = argparse.ArgumentParser(description='Convert Danbooru metadata files to plain text format.')
@@ -58,12 +72,13 @@ def main():
     parser.add_argument('--insert_custom_text', nargs='*', help='Insert custom texts at specified indexes in the output. Format: --insert_custom_text INDEX "CUSTOM_TEXT" INDEX "CUSTOM_TEXT" ...', required=False)
     parser.add_argument('--debug', action='store_true', help='Enable debug mode to display processing logs without making actual changes.')
     parser.add_argument('--save_extension', type=str, default='txt', help='Extension of the output file. Default is "txt".', required=False)
+    parser.add_argument('--mem_cache', type=str, choices=['ON', 'OFF'], default='ON', help='Enable or disable memory caching. Default is ON.')
 
     args = parser.parse_args()
 
     Path(args.save).mkdir(parents=True, exist_ok=True)
 
-    process_directory(args.dir, args.save, args.metadata_order, args.save_extension, args.insert_custom_text, args.debug)
+    process_directory(args.dir, args.save, args.metadata_order, args.save_extension, args.insert_custom_text, args.debug, mem_cache=args.mem_cache == 'ON')
 
 if __name__ == '__main__':
     main()
