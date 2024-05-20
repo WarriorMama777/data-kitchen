@@ -6,3 +6,4 @@ gallery-dl
 beautifulsoup4
 imutils
 numba
+psutil
