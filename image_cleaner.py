@@ -34,6 +34,9 @@ def main():
     else:
         imagePathList = [os.path.join(args.dir, f) for f in os.listdir(args.dir) if f.split('.')[-1] in args.extension.split()]
 
+    if args.verbose or args.debug:
+        print(f"Debug: 処理する画像のリスト {imagePathList}")
+
     hashes: Dict[int, List[str]] = {}
 
     # tqdmのdisableオプションを変更して、常に進行状況バーを表示します。
@@ -42,7 +45,14 @@ def main():
             print(f"Debug: 画像を処理する予定です {imagePath}")
 
         image = cv2.imread(imagePath)
+        if image is None:
+            if args.verbose or args.debug:
+                print(f"エラー: 画像を読み込めませんでした {imagePath} / Failed to load image {imagePath}")
+            continue
+
         h = dhash(image)
+        if args.verbose or args.debug:
+            print(f"Debug: 計算されたハッシュ {h} for {imagePath}")
 
         duplicate = False
         for stored_hash in hashes.keys():
