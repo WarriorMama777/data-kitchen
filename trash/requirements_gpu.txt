@@ -4,8 +4,5 @@ Pillow
 opencv-python
 gallery-dl
 beautifulsoup4
-imutils
-numba
-psutil
-imagehash
-annoy
+opencv-python-headless
+faiss-gpu
