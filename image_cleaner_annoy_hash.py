@@ -9,6 +9,7 @@ from annoy import AnnoyIndex
 import numpy as np
 from pathlib import Path
 import argparse
+import random  # randomをインポート
 
 def signal_handler(sig, frame):
     print('Script interrupted. Exiting safely...')
@@ -45,39 +46,41 @@ def process_images(image_files, save_dir, threshold, debug):
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     
-    # Initialize Annoy index
-    hash_size = 64  # pHash bit size, assuming 8x8 hash resulting in 64 bits.
+    hash_size = 64
     index = AnnoyIndex(hash_size, 'hamming')
     file_hashes = []
 
     for i, file in enumerate(tqdm(image_files, desc="Processing images")):
         image_hash = hash_image(file)
         if image_hash is not None:
-            # Convert image hash to a binary array of length 64
             binary_hash_array = image_hash_to_binary_array(image_hash)
             file_hashes.append((i, file, image_hash))
             index.add_item(i, binary_hash_array)
 
     index.build(10)
 
-    unique_images = []
-    for i, file, image_hash in tqdm(file_hashes, desc="Removing similar images"):
+    # 重複画像群を追跡するための辞書
+    duplicates = {}
+
+    for i, file, image_hash in tqdm(file_hashes, desc="Identifying duplicates"):
         if debug:
             print(f"Debug: Processing {file}")
-        similar_images = index.get_nns_by_item(i, 2)
-        if len(similar_images) > 1:
-            hamming_distance = index.get_distance(i, similar_images[1])
-            if hamming_distance < threshold:
-                continue
-        unique_images.append(file)
-    
-    for file in unique_images:
+        similar_images = index.get_nns_by_item(i, 2, search_k=-1, include_distances=True)
+        for sim_i, distance in zip(*similar_images):
+            if i != sim_i and distance < threshold:
+                if i in duplicates or sim_i in duplicates:
+                    continue
+                duplicates[i] = sim_i
+
+    # 重複していない画像と重複群から選ばれた一枚を保存する
+    unique_images = set(range(len(file_hashes))) - set(duplicates.keys())
+    for index in list(unique_images) + list(set(duplicates.values())):
+        _, file, _ = file_hashes[index]
         save_path = os.path.join(save_dir, os.path.relpath(file, args.dir))
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         shutil.copy2(file, save_path)
 
 def image_hash_to_binary_array(image_hash):
-    # Convert the hash (hex) into a binary array of length 64
     binary_string = bin(int(str(image_hash), 16))[2:].zfill(64)
     binary_array = np.array(list(binary_string), dtype=int)
     return binary_array
