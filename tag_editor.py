@@ -22,6 +22,7 @@ def parse_arguments():
     parser.add_argument("--extension", default="txt", help="File extension to process, e.g., txt json")
     parser.add_argument("--recursive", action="store_true", help="Process directories recursively")
     parser.add_argument("--debug", action="store_true", help="Debug mode")
+    parser.add_argument("--verbose", action="store_true", help="verbose log mode")
     parser.add_argument("--del_first", type=int, help="Delete first N characters")
     parser.add_argument("--del_last", type=int, help="Delete last N characters")
     parser.add_argument("--add_first", help="Add text at the beginning")
@@ -48,6 +49,13 @@ def process_file(file_path, save_dir, args, file_number):
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             content = file.read()
+            if args.verbose:
+                print(f"Debug: {file_path} の内容を読み込みました。")
+
+        # content が None でないことを確認
+        if content is None:
+            print(f"Warning: {file_path} の内容が読み取れませんでした。スキップします。")
+            return
 
         # Perform text manipulations based on arguments
         if args.del_first:
