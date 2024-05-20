@@ -4,10 +4,11 @@ import cv2
 from typing import List, Dict
 import numpy as np
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing
 import signal
 import sys
+import functools
 
 def dhash(image, hashSize=8):
     resized = cv2.resize(image, (hashSize + 1, hashSize))
@@ -85,7 +86,7 @@ def main():
     hashes: Dict[int, List[str]] = {}
 
     try:
-        with ThreadPoolExecutor(max_workers=args.threads) as executor:
+        with ProcessPoolExecutor(max_workers=args.threads) as executor:
             futures = []
             for i in range(0, len(imagePathList), args.batch_size):
                 batch = imagePathList[i:i + args.batch_size]
