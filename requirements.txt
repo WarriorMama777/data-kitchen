@@ -5,5 +5,4 @@ opencv-python
 gallery-dl
 beautifulsoup4
 imutils
-concurrent-futures
 numba
