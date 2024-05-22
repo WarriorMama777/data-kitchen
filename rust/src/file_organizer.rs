@@ -1,6 +1,9 @@
 use clap::{App, Arg};
+use indicatif::{ProgressBar, ProgressStyle};
 use std::fs;
 use std::path::Path;
+use std::thread;
+use std::time::Duration;
 use walkdir::WalkDir;
 
 fn main() {
@@ -49,7 +52,6 @@ fn main() {
     let copy = matches.is_present("copy");
     let cut = matches.is_present("cut");
 
-    // Ensure either --copy or --cut is specified
     if !copy && !cut {
         eprintln!("Either --copy or --cut must be specified.");
         std::process::exit(1);
@@ -59,7 +61,16 @@ fn main() {
         println!("Running in debug mode...");
     }
 
-    for entry in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
+    let entries: Vec<_> = WalkDir::new(dir).into_iter().filter_map(|e| e.ok()).collect();
+    let pb = ProgressBar::new(entries.len() as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos:>7}/{len:7} {msg}")
+            .expect("Failed to set template") // ここで Result を処理します
+            .progress_chars("#>-")
+    );
+
+    for entry in entries {
         let path = entry.path();
         let file_name = path.file_name().unwrap().to_str().unwrap();
 
@@ -86,16 +97,37 @@ fn main() {
             Path::new(save_dir).join(file_name)
         };
 
-        if let Some(parent) = save_path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent).unwrap();
+        // Retry loop with error handling
+        let mut attempts = 0;
+        while attempts < 3 {
+            if let Some(parent) = save_path.parent() {
+                if fs::create_dir_all(parent).is_err() {
+                    eprintln!("Failed to create directory: {}", parent.display());
+                    attempts += 1;
+                    thread::sleep(Duration::from_secs(1));
+                    continue;
+                }
+            }
+
+            let result = if copy {
+                fs::copy(path, &save_path).map(|_| ())
+            } else if cut {
+                fs::rename(path, &save_path)
+            } else {
+                break;
+            };
+
+            if result.is_err() {
+                eprintln!("Failed to process file: {}", path.display());
+                attempts += 1;
+                thread::sleep(Duration::from_secs(1));
+            } else {
+                break;
             }
         }
 
-        if copy {
-            fs::copy(path, &save_path).unwrap();
-        } else if cut {
-            fs::rename(path, &save_path).unwrap();
-        }
+        pb.inc(1);
     }
+
+    pb.finish_with_message("Processing complete.");
 }

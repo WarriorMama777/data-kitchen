@@ -38,16 +38,14 @@ def rename_files(directory, args, is_recursive=False, level=0):
 
         if new_name != filename:
             new_path = os.path.join(directory, new_name)
-            try:
-                os.rename(old_path, new_path)
-                print(f"'{filename}' を '{new_name}' に変更しました。")
-            except Exception as e:
-                print(f"ファイル名の変更中にエラーが発生しました: {e}")
-        
-         # デバッグモードが有効の場合は、ファイル名の変更を行わずに情報のみを表示
-        if args.debug:
-            print(f"デバッグモード: '{filename}' から '{new_name}' への変更をシミュレートします。")
-            continue  # 処理をスキップ
+            if args.debug:
+                print(f"デバッグモード: '{filename}' から '{new_name}' への変更をシミュレートします。")
+            else:
+                try:
+                    os.rename(old_path, new_path)
+                    print(f"'{filename}' を '{new_name}' に変更しました。")
+                except Exception as e:
+                    print(f"ファイル名の変更中にエラーが発生しました: {e}")
 
 def modify_name(index, base_name, num_length, args):
     new_name = base_name
@@ -149,3 +147,4 @@ if __name__ == "__main__":
         rename_files(args.dir, args, is_recursive=True)
     else:
         rename_files(args.dir, args)
+
