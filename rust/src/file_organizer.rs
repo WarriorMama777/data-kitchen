@@ -1,179 +1,101 @@
-use std::env;
+use clap::{App, Arg};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use walkdir::WalkDir;
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let matches = App::new("File Organizer")
+        .version("1.0")
+        .author("Your Name")
+        .about("Organizes files in a directory")
+        .arg(Arg::new("dir")
+            .long("dir")
+            .takes_value(true)
+            .help("Directory to process"))
+        .arg(Arg::new("extensions")
+            .long("extensions")
+            .takes_value(true)
+            .help("File extensions to process"))
+        .arg(Arg::new("file_name")
+            .long("file_name")
+            .takes_value(true)
+            .help("Specific file name to process"))
+        .arg(Arg::new("save")
+            .long("save")
+            .takes_value(true)
+            .help("Directory to save processed files"))
+        .arg(Arg::new("preserve")
+            .long("preserve")
+            .takes_value(false)
+            .help("Preserve the directory structure"))
+        .arg(Arg::new("debug")
+            .long("debug")
+            .takes_value(false)
+            .help("Run in debug mode without processing"))
+        .arg(Arg::new("copy")
+            .long("copy")
+            .takes_value(false)
+            .help("Copy files"))
+        .arg(Arg::new("cut")
+            .long("cut")
+            .takes_value(false)
+            .help("Move files"))
+        .get_matches();
 
-    if args.len() < 2 {
-        print_help();
-        return;
-    }
+    let dir = matches.value_of("dir").unwrap_or(".");
+    let save_dir = matches.value_of("save").unwrap_or(".");
+    let preserve_structure = matches.is_present("preserve");
+    let debug = matches.is_present("debug");
+    let copy = matches.is_present("copy");
+    let cut = matches.is_present("cut");
 
-    let mut dir = PathBuf::new();
-    let mut extensions = Vec::new();
-    let mut file_names = Vec::new();
-    let mut save_dir = PathBuf::new();
-    let mut preserve_structure = false;
-    let mut debug = false;
-    let mut copy = false;
-    let mut cut = false;
-
-    for arg in &args[1..] {
-        match arg.as_str() {
-            "-h" | "--help" => {
-                print_help();
-                return;
-            }
-            "--dir" => {
-                if let Some(dir_path) = args.get(args.iter().position(|x| x == arg).unwrap() + 1) {
-                    dir = PathBuf::from(dir_path);
-                } else {
-                    eprintln!("Error: --dir requires a directory path");
-                    return;
-                }
-            }
-            "--extensions" => {
-                if let Some(exts) = args.get(args.iter().position(|x| x == arg).unwrap() + 1) {
-                    extensions = exts.split(',').map(|s| s.to_string()).collect();
-                } else {
-                    eprintln!("Error: --extensions requires a comma-separated list of extensions");
-                    return;
-                }
-            }
-            "--file_name" => {
-                if let Some(names) = args.get(args.iter().position(|x| x == arg).unwrap() + 1) {
-                    file_names = names.split(',').map(|s| s.to_string()).collect();
-                } else {
-                    eprintln!("Error: --file_name requires a comma-separated list of file names");
-                    return;
-                }
-            }
-            "--save" => {
-                if let Some(save_path) = args.get(args.iter().position(|x| x == arg).unwrap() + 1) {
-                    save_dir = PathBuf::from(save_path);
-                } else {
-                    eprintln!("Error: --save requires a directory path");
-                    return;
-                }
-            }
-            "--preserve-structure" => preserve_structure = true,
-            "--debug" => debug = true,
-            "--copy" => copy = true,
-            "--cut" => cut = true,
-            _ => {
-                eprintln!("Error: Unknown argument '{}'", arg);
-                return;
-            }
-        }
-    }
-
+    // Ensure either --copy or --cut is specified
     if !copy && !cut {
-        eprintln!("Error: Either --copy or --cut is required");
-        return;
+        eprintln!("Either --copy or --cut must be specified.");
+        std::process::exit(1);
     }
 
     if debug {
-        println!("Directory: {:?}", dir);
-        println!("Extensions: {:?}", extensions);
-        println!("File names: {:?}", file_names);
-        println!("Save directory: {:?}", save_dir);
-        println!("Preserve structure: {}", preserve_structure);
-        println!("Copy: {}", copy);
-        println!("Cut: {}", cut);
-    } else {
-        organize_files(
-            &dir,
-            &extensions,
-            &file_names,
-            &save_dir,
-            preserve_structure,
-            copy,
-            cut,
-        );
-    }
-}
-
-fn organize_files(
-    dir: &Path,
-    extensions: &[String],
-    file_names: &[String],
-    save_dir: &Path,
-    preserve_structure: bool,
-    copy: bool,
-    cut: bool,
-) {
-    if !dir.is_dir() {
-        eprintln!("Error: {:?} is not a directory", dir);
-        return;
+        println!("Running in debug mode...");
     }
 
-    if !save_dir.is_dir() {
-        eprintln!("Error: {:?} is not a directory", save_dir);
-        return;
-    }
+    for entry in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        let file_name = path.file_name().unwrap().to_str().unwrap();
 
-    let mut files = Vec::new();
-
-    if extensions.is_empty() && file_names.is_empty() {
-        files = get_all_files(dir, preserve_structure);
-    } else {
-        for entry in fs::read_dir(dir).unwrap() {
-            let entry = entry.unwrap();
-            let path = entry.path();
-
-            if path.is_dir() {
-                files.append(&mut get_all_files(&path, preserve_structure));
-            } else if extensions.contains(&path.extension().unwrap_or_default().to_string_lossy().to_string())
-                || file_names.contains(&path.file_name().unwrap().to_string_lossy().to_string())
-            {
-                files.push(path);
+        if let Some(extensions) = matches.value_of("extensions") {
+            if !path.extension().map_or(false, |ext| extensions.contains(ext.to_str().unwrap())) {
+                continue;
             }
         }
-    }
 
-    for file in files {
-        let dest_path = save_dir.join(file.file_name().unwrap());
+        if let Some(specific_file_name) = matches.value_of("file_name") {
+            if file_name != specific_file_name {
+                continue;
+            }
+        }
+
+        if debug {
+            println!("Processing: {}", path.display());
+            continue;
+        }
+
+        let save_path = if preserve_structure {
+            Path::new(save_dir).join(path.strip_prefix(dir).unwrap())
+        } else {
+            Path::new(save_dir).join(file_name)
+        };
+
+        if let Some(parent) = save_path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent).unwrap();
+            }
+        }
 
         if copy {
-            fs::copy(&file, &dest_path).unwrap();
-        } else {
-            fs::rename(&file, &dest_path).unwrap();
+            fs::copy(path, &save_path).unwrap();
+        } else if cut {
+            fs::rename(path, &save_path).unwrap();
         }
     }
-}
-
-fn get_all_files(dir: &Path, preserve_structure: bool) -> Vec<PathBuf> {
-    let mut files = Vec::new();
-
-    for entry in fs::read_dir(dir).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-
-        if path.is_dir() {
-            files.append(&mut get_all_files(&path, preserve_structure));
-        } else {
-            if preserve_structure {
-                files.push(path);
-            } else {
-                files.push(path.strip_prefix(dir).unwrap().to_path_buf());
-            }
-        }
-    }
-
-    files
-}
-
-fn print_help() {
-    println!("Usage: organize_files [OPTIONS]");
-    println!("Options:");
-    println!("  -h, --help                   Print this help message");
-    println!("  --dir <DIR>                  Directory to process (default: current directory)");
-    println!("  --extensions <EXTENSIONS>    Comma-separated list of file extensions to process");
-    println!("  --file_name <FILE_NAMES>     Comma-separated list of file names to process");
-    println!("  --save <DIR>                 Directory to save processed files");
-    println!("  --preserve-structure         Preserve directory structure when saving files");
-    println!("  --debug                      Print debug information (no actual processing)");
-    println!("  --copy                       Copy files instead of moving them");
-    println!("  --cut                        Move files instead of copying them");
 }
