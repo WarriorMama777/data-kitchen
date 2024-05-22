@@ -26,7 +26,7 @@ def process_file(args):
     else:
         return try_operation(src_path, dest_path, action)
 
-def organize_files(src_dir, dest_dir, extensions, file_name, preserve_structure, preserve_own_folder, action, debug_mode, processes):
+def organize_files(src_dir, dest_dir, extensions, file_name, preserve_structure, preserve_own_folder, action, debug_mode, processes, multi_threading):
     src_dir_path = Path(src_dir)
     dest_dir_path = Path(dest_dir)
 
@@ -58,11 +58,16 @@ def organize_files(src_dir, dest_dir, extensions, file_name, preserve_structure,
             dest_path = dest_dir_path / src_path.name
         files_to_process.append((src_path, dest_path, action, debug_mode))
 
-    # マルチプロセッシングで処理
-    with ProcessPoolExecutor(max_workers=processes) as executor:
-        futures = [executor.submit(process_file, args) for args in files_to_process]
-        for _ in tqdm(as_completed(futures), total=len(futures), desc="ファイルの整頓中"):
-            pass
+    if multi_threading:
+        # マルチプロセッシングで処理
+        with ProcessPoolExecutor(max_workers=processes) as executor:
+            futures = [executor.submit(process_file, args) for args in files_to_process]
+            for _ in tqdm(as_completed(futures), total=len(futures), desc="ファイルの整頓中"):
+                pass
+    else:
+        # シングルスレッドで処理
+        for args in tqdm(files_to_process, desc="ファイルの整頓中"):
+            process_file(args)
 
 def main():
     parser = argparse.ArgumentParser(description="指定したディレクトリ下のファイルを整頓するスクリプト")
@@ -77,11 +82,12 @@ def main():
     parser.add_argument("--preserve_own_folder", action="store_true", help="`--dir`で指定されたディレクトリ自体のフォルダを`--save`の場所に作成します")
     parser.add_argument("--debug", action="store_true", help="デバッグ情報を表示します")
     parser.add_argument("--processes", type=int, default=4, help="使用するプロセス数")
+    parser.add_argument("--multi_threading", action="store_true", default=False, help="マルチスレッド処理を有効にします")
 
     args = parser.parse_args()
 
     action = "copy" if args.copy else "cut"
-    organize_files(args.dir, args.save, args.extensions, args.file_name, args.preserve_structure, args.preserve_own_folder, action, args.debug, args.processes)
+    organize_files(args.dir, args.save, args.extensions, args.file_name, args.preserve_structure, args.preserve_own_folder, action, args.debug, args.processes, args.multi_threading)
 
 if __name__ == "__main__":
     main()
