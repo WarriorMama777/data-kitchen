@@ -40,6 +40,7 @@ def rename_files(directory, args, is_recursive=False, level=0):
             new_path = os.path.join(directory, new_name)
             if args.debug:
                 print(f"デバッグモード: '{filename}' から '{new_name}' への変更をシミュレートします。")
+                continue  # 実際の名前変更をスキップ
             else:
                 try:
                     os.rename(old_path, new_path)
