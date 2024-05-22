@@ -6,3 +6,7 @@ gallery-dl/
 **/__pycache__/
 no_trace/
 download/
+node_modules/
+target/
+**/*.rs.bk
+Cargo.lock
