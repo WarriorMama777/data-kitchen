@@ -1,9 +1,8 @@
 import argparse
-import os
 from pathlib import Path
 import shutil
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import time
 
 def try_operation(src_path, dest_path, action, retries=3, delay=1):
@@ -27,35 +26,40 @@ def process_file(args):
     else:
         return try_operation(src_path, dest_path, action)
 
-def organize_files(src_dir, dest_dir, extensions, file_name, preserve_structure, action, debug_mode, threads):
-    if not Path(src_dir).exists():
+def organize_files(src_dir, dest_dir, extensions, file_name, preserve_structure, preserve_own_folder, action, debug_mode, processes):
+    src_dir_path = Path(src_dir)
+    dest_dir_path = Path(dest_dir)
+
+    if preserve_own_folder:
+        dest_dir_path = dest_dir_path / src_dir_path.name
+        if not dest_dir_path.exists():
+            dest_dir_path.mkdir(parents=True, exist_ok=True)
+
+    if not src_dir_path.exists():
         print(f"指定されたディレクトリが存在しません: {src_dir}")
         return
 
-    if not Path(dest_dir).exists():
+    if not dest_dir_path.exists():
         print(f"保存先ディレクトリが存在しません。作成します: {dest_dir}")
-        Path(dest_dir).mkdir(parents=True, exist_ok=True)
+        dest_dir_path.mkdir(parents=True, exist_ok=True)
 
     files_to_process = []
 
-    # ファイルを検索
-    for root, _, files in os.walk(src_dir):
-        for file in files:
-            if extensions and not file.endswith(extensions):
-                continue
-            if file_name and file_name not in file:
-                continue
-            src_path = Path(root) / file
-            if preserve_structure:
-                relative_path = src_path.relative_to(src_dir)
-                dest_path = Path(dest_dir) / relative_path
-                dest_path.parent.mkdir(parents=True, exist_ok=True)
-            else:
-                dest_path = Path(dest_dir) / file
-            files_to_process.append((src_path, dest_path, action, debug_mode))
+    # ファイルを検索とディレクトリ構造の維持
+    pattern = "**/*" if not extensions else f"**/*{extensions}"
+    for src_path in src_dir_path.glob(pattern):
+        if not src_path.is_file() or (file_name and file_name not in src_path.name):
+            continue
+        if preserve_structure:
+            relative_path = src_path.relative_to(src_dir)
+            dest_path = dest_dir_path / relative_path
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            dest_path = dest_dir_path / src_path.name
+        files_to_process.append((src_path, dest_path, action, debug_mode))
 
-    # マルチスレッドで処理
-    with ThreadPoolExecutor(max_workers=threads) as executor:
+    # マルチプロセッシングで処理
+    with ProcessPoolExecutor(max_workers=processes) as executor:
         futures = [executor.submit(process_file, args) for args in files_to_process]
         for _ in tqdm(as_completed(futures), total=len(futures), desc="ファイルの整頓中"):
             pass
@@ -70,13 +74,14 @@ def main():
     parser.add_argument("--file_name", type=str, help="処理対象となるファイル名")
     parser.add_argument("--save", type=str, required=True, help="処理対象ファイルを保存するディレクトリ")
     parser.add_argument("--preserve_structure", action="store_true", help="ディレクトリの構造を保持してファイルを保存します")
+    parser.add_argument("--preserve_own_folder", action="store_true", help="`--dir`で指定されたディレクトリ自体のフォルダを`--save`の場所に作成します")
     parser.add_argument("--debug", action="store_true", help="デバッグ情報を表示します")
-    parser.add_argument("--threads", type=int, default=4, help="使用するスレッド数")
+    parser.add_argument("--processes", type=int, default=4, help="使用するプロセス数")
 
     args = parser.parse_args()
 
     action = "copy" if args.copy else "cut"
-    organize_files(args.dir, args.save, args.extensions, args.file_name, args.preserve_structure, action, args.debug, args.threads)
+    organize_files(args.dir, args.save, args.extensions, args.file_name, args.preserve_structure, args.preserve_own_folder, action, args.debug, args.processes)
 
 if __name__ == "__main__":
     main()
