@@ -4,6 +4,7 @@ import shutil
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import time
+import gc  # gcモジュールのインポート
 
 def try_operation(src_path, dest_path, action, retries=3, delay=1):
     for attempt in range(retries):
@@ -26,7 +27,11 @@ def process_file(args):
     else:
         return try_operation(src_path, dest_path, action)
 
-def organize_files(src_dir, dest_dir, extensions, file_name, preserve_structure, preserve_own_folder, action, debug_mode, processes, multi_threading):
+def organize_files(src_dir, dest_dir, extensions, file_name, preserve_structure, preserve_own_folder, action, debug_mode, processes, multi_threading, gc_disable):
+    if gc_disable:  # ガベージコレクションを無効にするかどうかのチェック
+        gc.disable()  # ガベージコレクションを無効にする
+        print("ガベージコレクションを無効にしました。")
+
     src_dir_path = Path(src_dir)
     dest_dir_path = Path(dest_dir)
 
@@ -45,7 +50,6 @@ def organize_files(src_dir, dest_dir, extensions, file_name, preserve_structure,
 
     files_to_process = []
 
-    # ファイルを検索とディレクトリ構造の維持
     pattern = "**/*" if not extensions else f"**/*{extensions}"
     for src_path in src_dir_path.glob(pattern):
         if not src_path.is_file() or (file_name and file_name not in src_path.name):
@@ -59,15 +63,17 @@ def organize_files(src_dir, dest_dir, extensions, file_name, preserve_structure,
         files_to_process.append((src_path, dest_path, action, debug_mode))
 
     if multi_threading:
-        # マルチプロセッシングで処理
         with ProcessPoolExecutor(max_workers=processes) as executor:
             futures = [executor.submit(process_file, args) for args in files_to_process]
             for _ in tqdm(as_completed(futures), total=len(futures), desc="ファイルの整頓中"):
                 pass
     else:
-        # シングルスレッドで処理
         for args in tqdm(files_to_process, desc="ファイルの整頓中"):
             process_file(args)
+
+    if gc_disable:  # ガベージコレクションが無効にされている場合、再度有効にする
+        gc.enable()  # ガベージコレクションを有効にする
+        print("ガベージコレクションを再度有効にしました。")
 
 def main():
     parser = argparse.ArgumentParser(description="指定したディレクトリ下のファイルを整頓するスクリプト")
@@ -83,11 +89,12 @@ def main():
     parser.add_argument("--debug", action="store_true", help="デバッグ情報を表示します")
     parser.add_argument("--processes", type=int, default=4, help="使用するプロセス数")
     parser.add_argument("--multi_threading", action="store_true", default=False, help="マルチスレッド処理を有効にします")
+    parser.add_argument("--gc-disable", action="store_true", help="ガベージコレクションを無効にします")  # ガベージコレクションを無効にするための引数を追加
 
     args = parser.parse_args()
 
     action = "copy" if args.copy else "cut"
-    organize_files(args.dir, args.save, args.extensions, args.file_name, args.preserve_structure, args.preserve_own_folder, action, args.debug, args.processes, args.multi_threading)
+    organize_files(args.dir, args.save, args.extensions, args.file_name, args.preserve_structure, args.preserve_own_folder, action, args.debug, args.processes, args.multi_threading, args.gc_disable)
 
 if __name__ == "__main__":
     main()
