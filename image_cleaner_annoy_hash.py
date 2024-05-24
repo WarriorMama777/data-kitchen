@@ -22,6 +22,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Clean similar images from a directory.')
     parser.add_argument('--dir', required=True, help='Directory to process')
     parser.add_argument('--save_dir', default='output/', help='Directory to save the output images')
+    parser.add_argument('--save_dir_duplicate', default=None, help='Directory to save duplicate images')
     parser.add_argument('--extension', default='jpg png webp', help='File extensions to process')
     parser.add_argument('--recursive', action='store_true', help='Process directories recursively')
     parser.add_argument('--threshold', type=int, default=5, help='Hamming distance threshold for image removal')
@@ -59,13 +60,16 @@ def hash_image(image_path):
         print(f"Failed to process {image_path}: {e}")
         return None
 
-def process_images(image_files, save_dir, threshold, debug, preserve_own_folder, preserve_structure, gc_disable):
+def process_images(image_files, save_dir, save_dir_duplicate, threshold, debug, preserve_own_folder, preserve_structure, gc_disable):
     if gc_disable:
         gc.disable()
 
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     
+    if save_dir_duplicate and not os.path.exists(save_dir_duplicate):
+        os.makedirs(save_dir_duplicate)
+
     hash_size = 64
     index = AnnoyIndex(hash_size, 'hamming')
     file_hashes = []
@@ -104,11 +108,20 @@ def process_images(image_files, save_dir, threshold, debug, preserve_own_folder,
 
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         shutil.copy2(file, save_path)
+        
+    # 重複画像の保存処理を追加
+    for duplicate in duplicates:
+        if save_dir_duplicate:
+            for index in duplicates[duplicate]:
+                _, file, _ = file_hashes[index]
+                save_path = os.path.join(save_dir_duplicate, os.path.basename(file))
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                shutil.copy2(file, save_path)
 
     # 処理結果の表示
+    # 削減枚数の算出と表示の修正
     original_count = len(image_files)
-    # processed_count の計算を修正
-    processed_count = len(unique_images)
+    processed_count = len([*unique_images, *set(duplicates.values())])
     reduced_count = original_count - processed_count
     print(f"{reduced_count}枚削減されました。")
 
@@ -120,5 +133,6 @@ def image_hash_to_binary_array(image_hash):
 if __name__ == "__main__":
     args = parse_arguments()
     image_files = get_image_files(args.dir, args.extension, args.recursive, args.by_folder)
-    process_images(image_files, args.save_dir, args.threshold, args.debug, args.preserve_own_folder, args.preserve_structure, args.gc_disable)
+    process_images(image_files, args.save_dir, args.save_dir_duplicate, args.threshold, args.debug, args.preserve_own_folder, args.preserve_structure, args.gc_disable)
+
 
