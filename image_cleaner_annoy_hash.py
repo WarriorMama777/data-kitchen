@@ -99,6 +99,14 @@ def process_images(image_files, save_dir, threshold, debug, preserve_own_folder,
             save_path = os.path.join(save_dir, os.path.basename(file))
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         shutil.copy2(file, save_path)
+    # 処理前の画像ファイルの数
+    original_count = len(image_files)
+    # 処理後のユニークな画像ファイルの数
+    processed_count = len(unique_images) + len(set(duplicates.values()))
+    # 削減された画像ファイルの数
+    reduced_count = original_count - processed_count
+    # 削減された画像ファイルの数を表示
+    print(f"{reduced_count}枚削減されました。")
 
 def image_hash_to_binary_array(image_hash):
     binary_string = bin(int(str(image_hash), 16))[2:].zfill(64)
