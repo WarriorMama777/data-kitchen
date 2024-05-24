@@ -31,14 +31,25 @@ def parse_arguments():
     parser.add_argument('--processes', type=int, default=1, help='Number of processes to use')
     parser.add_argument('--multi_threading', action='store_true', help='Enable multi-threading processing')
     parser.add_argument('--gc-disable', action='store_true', help='Disable garbage collection')
+    parser.add_argument('--by_folder', action='store_true', help='Process each folder in the directory individually')
     return parser.parse_args()
 
-def get_image_files(directory, extensions, recursive):
+def get_image_files(directory, extensions, recursive, by_folder):
+    all_files = []
     extensions = tuple(extensions.split())
-    if recursive:
-        return [str(p) for p in Path(directory).rglob('*') if p.suffix[1:] in extensions]
+    if by_folder:
+        subfolders = [f.path for f in os.scandir(directory) if f.is_dir()]
+        for folder in subfolders:
+            if recursive:
+                all_files.extend([str(p) for p in Path(folder).rglob('*') if p.suffix[1:] in extensions])
+            else:
+                all_files.extend([str(p) for p in Path(folder).glob('*') if p.suffix[1:] in extensions])
     else:
-        return [str(p) for p in Path(directory).glob('*') if p.suffix[1:] in extensions]
+        if recursive:
+            all_files = [str(p) for p in Path(directory).rglob('*') if p.suffix[1:] in extensions]
+        else:
+            all_files = [str(p) for p in Path(directory).glob('*') if p.suffix[1:] in extensions]
+    return all_files
 
 def hash_image(image_path):
     try:
@@ -96,6 +107,6 @@ def image_hash_to_binary_array(image_hash):
 
 if __name__ == "__main__":
     args = parse_arguments()
-    image_files = get_image_files(args.dir, args.extension, args.recursive)
+    image_files = get_image_files(args.dir, args.extension, args.recursive, args.by_folder)
     process_images(image_files, args.save_dir, args.threshold, args.debug, args.preserve_own_folder, args.preserve_structure, args.gc_disable)
 
