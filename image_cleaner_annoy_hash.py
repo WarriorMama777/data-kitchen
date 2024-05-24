@@ -107,7 +107,8 @@ def process_images(image_files, save_dir, threshold, debug, preserve_own_folder,
 
     # 処理結果の表示
     original_count = len(image_files)
-    processed_count = len(unique_images) + len(set(duplicates.values()))
+    # processed_count の計算を修正
+    processed_count = len(unique_images)
     reduced_count = original_count - processed_count
     print(f"{reduced_count}枚削減されました。")
 
