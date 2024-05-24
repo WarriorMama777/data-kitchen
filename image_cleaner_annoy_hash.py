@@ -22,6 +22,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Clean similar images from a directory.')
     parser.add_argument('--dir', required=True, help='Directory to process')
     parser.add_argument('--save_dir', default='output/', help='Directory to save the output images')
+    parser.add_argument('--save_dir_duplicate', default='', help='Directory to save duplicate images')
     parser.add_argument('--extension', default='jpg png webp', help='File extensions to process')
     parser.add_argument('--recursive', action='store_true', help='Process directories recursively')
     parser.add_argument('--threshold', type=int, default=5, help='Hamming distance threshold for image removal')
@@ -59,12 +60,14 @@ def hash_image(image_path):
         print(f"Failed to process {image_path}: {e}")
         return None
 
-def process_images(image_files, save_dir, threshold, debug, preserve_own_folder, preserve_structure, gc_disable):
+def process_images(image_files, save_dir, save_dir_duplicate, threshold, debug, preserve_own_folder, preserve_structure, gc_disable):
     if gc_disable:
         gc.disable()
 
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
+    if save_dir_duplicate and not os.path.exists(save_dir_duplicate):
+        os.makedirs(save_dir_duplicate)
     
     hash_size = 64
     index = AnnoyIndex(hash_size, 'hamming')
@@ -91,25 +94,39 @@ def process_images(image_files, save_dir, threshold, debug, preserve_own_folder,
                 duplicates[i] = sim_i
 
     unique_images = set(range(len(file_hashes))) - set(duplicates.keys())
-    for index in list(unique_images) + list(set(duplicates.values())):
+    for index in unique_images:
         _, file, _ = file_hashes[index]
-        if preserve_structure:
-            save_path = os.path.join(save_dir, os.path.relpath(file, Path(args.dir).parent if preserve_own_folder else args.dir))
-        else:
-            if preserve_own_folder:
-                base_dir_name = os.path.basename(os.path.normpath(args.dir))
-                save_path = os.path.join(save_dir, base_dir_name, os.path.basename(file))
-            else:
-                save_path = os.path.join(save_dir, os.path.basename(file))
-
+        save_path = get_save_path(file, save_dir, args)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         shutil.copy2(file, save_path)
+
+    for dup_index, orig_index in duplicates.items():
+        _, dup_file, _ = file_hashes[dup_index]
+        if save_dir_duplicate:
+            save_path = get_save_path(dup_file, save_dir_duplicate, args)
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            shutil.copy2(dup_file, save_path)
+        else:
+            _, orig_file, _ = file_hashes[orig_index]
+            save_path = get_save_path(orig_file, save_dir, args)
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            shutil.copy2(orig_file, save_path)
 
     # 処理結果の表示
     original_count = len(image_files)
     saved_count = sum(os.path.isfile(os.path.join(dp, f)) for dp, dn, filenames in os.walk(save_dir) for f in filenames)
     reduced_count = original_count - saved_count
     print(f"{reduced_count}枚削減されました。")
+
+def get_save_path(file, base_dir, args):
+    if args.preserve_structure:
+        return os.path.join(base_dir, os.path.relpath(file, Path(args.dir).parent if args.preserve_own_folder else args.dir))
+    else:
+        if args.preserve_own_folder:
+            base_dir_name = os.path.basename(os.path.normpath(args.dir))
+            return os.path.join(base_dir, base_dir_name, os.path.basename(file))
+        else:
+            return os.path.join(base_dir, os.path.basename(file))
 
 def image_hash_to_binary_array(image_hash):
     binary_string = bin(int(str(image_hash), 16))[2:].zfill(64)
@@ -119,5 +136,4 @@ def image_hash_to_binary_array(image_hash):
 if __name__ == "__main__":
     args = parse_arguments()
     image_files = get_image_files(args.dir, args.extension, args.recursive, args.by_folder)
-    process_images(image_files, args.save_dir, args.threshold, args.debug, args.preserve_own_folder, args.preserve_structure, args.gc_disable)
-
+    process_images(image_files, args.save_dir, args.save_dir_duplicate, args.threshold, args.debug, args.preserve_own_folder, args.preserve_structure, args.gc_disable)
