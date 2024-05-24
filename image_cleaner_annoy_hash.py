@@ -19,20 +19,19 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description='Clean similar images from a directory.')
-    parser.add_argument('--dir', required=True, help='Directory to process')
-    parser.add_argument('--save_dir', default='output/', help='Directory to save the output images')
-    parser.add_argument('--save_dir_duplicate', default='', help='Directory to save duplicate images')
-    parser.add_argument('--extension', default='jpg png webp', help='File extensions to process')
-    parser.add_argument('--recursive', action='store_true', help='Process directories recursively')
-    parser.add_argument('--threshold', type=int, default=5, help='Hamming distance threshold for image removal')
-    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
-    parser.add_argument('--preserve_own_folder', action='store_true', help='Preserve the directory itself in the save location')
-    parser.add_argument('--preserve_structure', action='store_true', help='Preserve the directory structure when saving files')
-    parser.add_argument('--processes', type=int, default=1, help='Number of processes to use')
-    parser.add_argument('--multi_threading', action='store_true', help='Enable multi-threading processing')
-    parser.add_argument('--gc-disable', action='store_true', help='Disable garbage collection')
-    parser.add_argument('--by_folder', action='store_true', help='Process each folder in the directory individually')
+    parser = argparse.ArgumentParser(description='画像の重複を削除するスクリプト')
+    parser.add_argument('--dir', type=str, help='画像が格納されているディレクトリ')
+    parser.add_argument('--extension', type=str, default='jpg jpeg png', help='対象とするファイルの拡張子')
+    parser.add_argument('--recursive', action='store_true', help='サブディレクトリも含めて画像を検索')
+    parser.add_argument('--by_folder', action='store_true', help='フォルダごとに分けて処理')
+    parser.add_argument('--save_dir', type=str, help='重複していない画像を保存するディレクトリ')
+    parser.add_argument('--save_dir_duplicate', type=str, help='重複している画像を保存するディレクトリ', default=None)
+    parser.add_argument('--threshold', type=int, default=5, help='重複と判断する閾値')
+    parser.add_argument('--debug', action='store_true', help='デバッグ情報を表示')
+    parser.add_argument('--preserve_own_folder', action='store_true', help='元のフォルダ構造を保持')
+    parser.add_argument('--preserve_structure', action='store_true', help='ファイルの保存時にディレクトリ構造を保持')
+    parser.add_argument('--gc_disable', action='store_true', help='ガベージコレクションを無効にする')
+    parser.add_argument('--batch_size', type=int, default=10, help='1回の処理で扱う画像の数')
     return parser.parse_args()
 
 def get_image_files(directory, extensions, recursive, by_folder):
@@ -60,7 +59,7 @@ def hash_image(image_path):
         print(f"Failed to process {image_path}: {e}")
         return None
 
-def process_images(image_files, save_dir, save_dir_duplicate, threshold, debug, preserve_own_folder, preserve_structure, gc_disable):
+def process_images(image_files, save_dir, save_dir_duplicate, threshold, debug, preserve_own_folder, preserve_structure, gc_disable, batch_size):
     if gc_disable:
         gc.disable()
 
@@ -73,12 +72,15 @@ def process_images(image_files, save_dir, save_dir_duplicate, threshold, debug, 
     index = AnnoyIndex(hash_size, 'hamming')
     file_hashes = []
 
-    for i, file in enumerate(tqdm(image_files, desc="Processing images")):
-        image_hash = hash_image(file)
-        if image_hash is not None:
-            binary_hash_array = image_hash_to_binary_array(image_hash)
-            file_hashes.append((i, file, image_hash))
-            index.add_item(i, binary_hash_array)
+    for batch_start in tqdm(range(0, len(image_files), batch_size), desc="Processing batches"):
+        batch_files = image_files[batch_start:batch_start+batch_size]
+        for i, file in enumerate(batch_files):
+            global_index = batch_start + i  # 全体のインデックス
+            image_hash = hash_image(file)
+            if image_hash is not None:
+                binary_hash_array = image_hash_to_binary_array(image_hash)
+                file_hashes.append((global_index, file, image_hash))
+                index.add_item(global_index, binary_hash_array)
 
     index.build(10)
     duplicates = {}
@@ -136,4 +138,4 @@ def image_hash_to_binary_array(image_hash):
 if __name__ == "__main__":
     args = parse_arguments()
     image_files = get_image_files(args.dir, args.extension, args.recursive, args.by_folder)
-    process_images(image_files, args.save_dir, args.save_dir_duplicate, args.threshold, args.debug, args.preserve_own_folder, args.preserve_structure, args.gc_disable)
+    process_images(image_files, args.save_dir, args.save_dir_duplicate, args.threshold, args.debug, args.preserve_own_folder, args.preserve_structure, args.gc_disable, args.batch_size)
