@@ -1,7 +1,7 @@
 import os
 import sys
 import signal
-import shutil  # shutilをインポート
+import shutil
 from PIL import Image
 import imagehash
 from tqdm import tqdm
@@ -9,7 +9,8 @@ from annoy import AnnoyIndex
 import numpy as np
 from pathlib import Path
 import argparse
-import random  # randomをインポート
+import random
+import gc  # ガベージコレクションを制御するためにインポート
 
 def signal_handler(sig, frame):
     print('Script interrupted. Exiting safely...')
@@ -25,6 +26,11 @@ def parse_arguments():
     parser.add_argument('--recursive', action='store_true', help='Process directories recursively')
     parser.add_argument('--threshold', type=int, default=5, help='Hamming distance threshold for image removal')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    parser.add_argument('--preserve_own_folder', action='store_true', help='Preserve the directory itself in the save location')
+    parser.add_argument('--preserve_structure', action='store_true', help='Preserve the directory structure when saving files')
+    parser.add_argument('--processes', type=int, default=1, help='Number of processes to use')
+    parser.add_argument('--multi_threading', action='store_true', help='Enable multi-threading processing')
+    parser.add_argument('--gc-disable', action='store_true', help='Disable garbage collection')
     return parser.parse_args()
 
 def get_image_files(directory, extensions, recursive):
@@ -42,7 +48,10 @@ def hash_image(image_path):
         print(f"Failed to process {image_path}: {e}")
         return None
 
-def process_images(image_files, save_dir, threshold, debug):
+def process_images(image_files, save_dir, threshold, debug, preserve_own_folder, preserve_structure, gc_disable):
+    if gc_disable:
+        gc.disable()
+
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     
@@ -58,8 +67,6 @@ def process_images(image_files, save_dir, threshold, debug):
             index.add_item(i, binary_hash_array)
 
     index.build(10)
-
-    # 重複画像群を追跡するための辞書
     duplicates = {}
 
     for i, file, image_hash in tqdm(file_hashes, desc="Identifying duplicates"):
@@ -72,11 +79,13 @@ def process_images(image_files, save_dir, threshold, debug):
                     continue
                 duplicates[i] = sim_i
 
-    # 重複していない画像と重複群から選ばれた一枚を保存する
     unique_images = set(range(len(file_hashes))) - set(duplicates.keys())
     for index in list(unique_images) + list(set(duplicates.values())):
         _, file, _ = file_hashes[index]
-        save_path = os.path.join(save_dir, os.path.relpath(file, args.dir))
+        if preserve_structure:
+            save_path = os.path.join(save_dir, os.path.relpath(file, Path(args.dir).parent if preserve_own_folder else args.dir))
+        else:
+            save_path = os.path.join(save_dir, os.path.basename(file))
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         shutil.copy2(file, save_path)
 
@@ -88,4 +97,5 @@ def image_hash_to_binary_array(image_hash):
 if __name__ == "__main__":
     args = parse_arguments()
     image_files = get_image_files(args.dir, args.extension, args.recursive)
-    process_images(image_files, args.save_dir, args.threshold, args.debug)
+    process_images(image_files, args.save_dir, args.threshold, args.debug, args.preserve_own_folder, args.preserve_structure, args.gc_disable)
+
