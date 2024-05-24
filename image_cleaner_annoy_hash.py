@@ -93,19 +93,21 @@ def process_images(image_files, save_dir, threshold, debug, preserve_own_folder,
     unique_images = set(range(len(file_hashes))) - set(duplicates.keys())
     for index in list(unique_images) + list(set(duplicates.values())):
         _, file, _ = file_hashes[index]
-        if preserve_structure:
-            save_path = os.path.join(save_dir, os.path.relpath(file, Path(args.dir).parent if preserve_own_folder else args.dir))
+    if preserve_structure:
+        save_path = os.path.join(save_dir, os.path.relpath(file, Path(args.dir).parent if preserve_own_folder else args.dir))
+    else:
+        if preserve_own_folder:
+            base_dir_name = os.path.basename(os.path.normpath(args.dir))
+            save_path = os.path.join(save_dir, base_dir_name, os.path.basename(file))
         else:
             save_path = os.path.join(save_dir, os.path.basename(file))
+
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         shutil.copy2(file, save_path)
-    # 処理前の画像ファイルの数
+    # 処理結果の表示
     original_count = len(image_files)
-    # 処理後のユニークな画像ファイルの数
     processed_count = len(unique_images) + len(set(duplicates.values()))
-    # 削減された画像ファイルの数
     reduced_count = original_count - processed_count
-    # 削減された画像ファイルの数を表示
     print(f"{reduced_count}枚削減されました。")
 
 def image_hash_to_binary_array(image_hash):
