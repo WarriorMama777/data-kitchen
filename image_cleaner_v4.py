@@ -58,7 +58,6 @@ def remove_duplicates(image_files, threshold, save_dir, save_dir_duplicate, debu
     hash_dict = {}
     duplicates = []
     saved_images_count = 0  # 保存された画像の数を追跡
-    first_duplicate_saved = False  # 最初の重複画像が保存されたかどうか
     cache = []  # メモリキャッシュ用
 
     for img_path in tqdm(image_files, desc="Processing images"):
@@ -72,11 +71,7 @@ def remove_duplicates(image_files, threshold, save_dir, save_dir_duplicate, debu
             is_duplicate = False
             for existing_hash in hash_dict.keys():
                 if bin(img_hash ^ existing_hash).count('1') <= threshold:
-                    if not first_duplicate_saved:
-                        hash_dict[img_hash] = img_path  # 最初の重複画像を保存
-                        first_duplicate_saved = True
-                    else:
-                        duplicates.append((img_path, hash_dict[existing_hash]))
+                    duplicates.append((img_path, hash_dict[existing_hash]))
                     is_duplicate = True
                     break
 
@@ -93,12 +88,15 @@ def remove_duplicates(image_files, threshold, save_dir, save_dir_duplicate, debu
     ensure_directory(save_dir)
     ensure_directory(save_dir_duplicate)
 
-    # `--preserve_own_folder`が有効な場合の処理
-    if args.preserve_own_folder:
-        base_folder_name = os.path.basename(os.path.normpath(args.dir))
-        save_dir = os.path.join(save_dir, base_folder_name)
+    # `--preserve_structure` または `--preserve_own_folder` が有効な場合の処理
+    if args.preserve_structure or args.preserve_own_folder:
+        if args.preserve_own_folder:
+            base_folder_name = os.path.basename(os.path.normpath(args.dir))
+            save_dir = os.path.join(save_dir, base_folder_name)
+            save_dir_duplicate = os.path.join(save_dir_duplicate, base_folder_name)
         ensure_directory(save_dir)
-
+        ensure_directory(save_dir_duplicate)
+    
     if mem_cache == 'ON':
         for img_hash, img_path in hash_dict.items():
             cache.append((img_path, os.path.commonpath([img_path, args.dir])))
@@ -133,7 +131,7 @@ def process_image_save(img_path, save_dir, args):
 
 def process_duplicate_save(duplicate, original, save_dir_duplicate, args):
     relative_path = os.path.relpath(duplicate, start=os.path.commonpath([duplicate, save_dir_duplicate]))
-    if args.preserve_structure:
+    if args.preserve_structure or args.preserve_own_folder:
         dest_path = os.path.join(save_dir_duplicate, relative_path)
     else:
         dest_path = os.path.join(save_dir_duplicate, os.path.basename(duplicate))
