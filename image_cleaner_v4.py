@@ -1,100 +1,143 @@
-import argparse
 import os
 import cv2
 import numpy as np
+import argparse
 from tqdm import tqdm
-from collections import defaultdict
-import shutil
+from PIL import Image
+import hashlib
 import signal
 import gc
+import shutil
 
-def signal_handler(signal, frame):
-    print("\nプログラムが中断されました。")
+# dhash implementation
+def dhash(image, hash_size=8):
+    resized = cv2.resize(image, (hash_size + 1, hash_size))
+    diff = resized[:, 1:] > resized[:, :-1]
+    return sum([2 ** i for (i, v) in enumerate(diff.flatten()) if v])
+
+# Signal handler for safe termination
+def signal_handler(sig, frame):
+    print('Process interrupted! Exiting gracefully...')
     exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
-def dhash(image, hashSize=8):
-    # 画像をリサイズし、グレースケールに変換
-    resized = cv2.resize(image, (hashSize + 1, hashSize))
-    gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Image Cleaner Script')
+    parser.add_argument('--dir', required=True, help='Directory to process')
+    parser.add_argument('--save_dir', default='output/', help='Directory to save non-duplicate images')
+    parser.add_argument('--save_dir_duplicate', help='Directory to save duplicate images')
+    parser.add_argument('--extension', default='jpg png webp', help='Extensions of images to process')
+    parser.add_argument('--recursive', action='store_true', help='Recursively search directories')
+    parser.add_argument('--debug', action='store_true', help='Debug mode')
+    parser.add_argument('--threshold', type=int, default=10, help='Hamming distance threshold for duplicates')
+    parser.add_argument('--preserve_own_folder', action='store_true', help='Preserve own folder structure')
+    parser.add_argument('--preserve_structure', action='store_true', help='Preserve directory structure')
+    parser.add_argument('--gc_disable', action='store_true', help='Disable garbage collection')
+    parser.add_argument('--by_folder', action='store_true', help='Process folders one by one')
+    parser.add_argument('--process_group', type=int, default=2, help='Number of images in a processing group')
+    parser.add_argument('--mem_cache', action='store_true', default=True, help='Enable in-memory caching')
+    return parser.parse_args()
 
-    # 左から右に向かって、ピクセルを比較しハッシュを生成
-    diff = gray[:, 1:] > gray[:, :-1]
-    return sum([2 ** i for (i, v) in enumerate(diff.flatten()) if v])
+def ensure_directory(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
 
-def process_images(args):
+def get_image_files(directory, extensions, recursive=False):
+    image_files = []
+    for root, _, files in os.walk(directory):
+        for file in files:
+            if file.split('.')[-1].lower() in extensions:
+                image_files.append(os.path.join(root, file))
+        if not recursive:
+            break
+    return image_files
+
+def remove_duplicates(image_files, threshold, save_dir, save_dir_duplicate, debug, args):
+    hash_dict = {}
+    duplicates = []
+    saved_images_count = 0  # 保存された画像の数を追跡
+
+    for img_path in tqdm(image_files, desc="Processing images"):
+        try:
+            image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+            if image is None:
+                continue
+
+            img_hash = dhash(image)
+
+            is_duplicate = False
+            for existing_hash in hash_dict.keys():
+                if bin(img_hash ^ existing_hash).count('1') <= threshold:
+                    duplicates.append((img_path, hash_dict[existing_hash]))
+                    is_duplicate = True
+                    break
+
+            if not is_duplicate:
+                hash_dict[img_hash] = img_path
+
+        except Exception as e:
+            print(f"Error processing {img_path}: {e}")
+
+    if debug:
+        print("Debug mode enabled. No files will be moved.")
+        return
+
+    ensure_directory(save_dir)
+    if save_dir_duplicate:
+        ensure_directory(save_dir_duplicate)
+
+    # `--preserve_own_folder`が有効な場合の処理
+    if args.preserve_own_folder:
+        base_folder_name = os.path.basename(os.path.normpath(args.dir))
+        save_dir = os.path.join(save_dir, base_folder_name)
+        ensure_directory(save_dir)
+
+    for img_hash, img_path in hash_dict.items():
+        relative_path = os.path.relpath(img_path, start=os.path.commonpath([img_path, args.dir]))
+        if args.preserve_structure or args.preserve_own_folder:
+            dest_path = os.path.join(save_dir, relative_path)
+        else:
+            dest_path = os.path.join(save_dir, os.path.basename(img_path))
+        ensure_directory(os.path.dirname(dest_path))
+        shutil.copyfile(img_path, dest_path)
+        saved_images_count += 1  # 成功した保存ごとにカウントアップ
+
+    for duplicate, original in duplicates:
+        if save_dir_duplicate:
+            relative_path = os.path.relpath(duplicate, start=os.path.commonpath([duplicate, save_dir_duplicate]))
+            if args.preserve_structure:
+                dest_path = os.path.join(save_dir_duplicate, relative_path)
+            else:
+                dest_path = os.path.join(save_dir_duplicate, os.path.basename(duplicate))
+            ensure_directory(os.path.dirname(dest_path))
+            shutil.copyfile(duplicate, dest_path)
+        else:
+            os.remove(duplicate)
+
+    print(f"Saved images: {saved_images_count}")
+    print(f"Removed duplicates: {len(duplicates)}")
+
+def main():
+    args = parse_arguments()
+
     if args.gc_disable:
         gc.disable()
 
-    # 引数で指定されたディレクトリの画像を取得
     extensions = args.extension.split()
-    images = []
-    for root, dirs, files in os.walk(args.dir, topdown=True):
-        if not args.recursive:
-            dirs.clear()
-        for file in files:
-            if any(file.lower().endswith(ext) for ext in extensions):
-                path = os.path.join(root, file)
-                images.append(path)
-                if args.by_folder:
-                    break
+    image_files = get_image_files(args.dir, extensions, args.recursive)
 
-    # 画像のハッシュを計算して格納
-    image_hashes = {}
-    for image_path in tqdm(images, desc="画像のハッシュ計算"):
-        image = cv2.imread(image_path)
-        image_hash = dhash(image)
-        if image_hash not in image_hashes:
-            image_hashes[image_hash] = []
-        image_hashes[image_hash].append(image_path)
-
-    # 類似画像を削減
-    processed_images = {}
-    duplicate_images = defaultdict(list)
-    for image_hash, paths in tqdm(image_hashes.items(), desc="類似画像の削減"):
-        if len(paths) > 1:
-            for path in paths[1:]:
-                duplicate_images[paths[0]].append(path)
-        processed_images[paths[0]] = None
-
-    if not os.path.exists(args.save_dir):
-        os.makedirs(args.save_dir)
-
-    if args.save_dir_duplicate and not os.path.exists(args.save_dir_duplicate):
-        os.makedirs(args.save_dir_duplicate)
-
-    # 画像を保存
-    for image_path in tqdm(processed_images.keys(), desc="画像の保存"):
-        dest_path = os.path.join(args.save_dir, os.path.basename(image_path)) if not args.preserve_own_folder else os.path.join(args.save_dir, os.path.relpath(image_path, args.dir))
-        shutil.copy2(image_path, dest_path)
-
-    # 重複画像を別ディレクトリに保存
-    for original, duplicates in tqdm(duplicate_images.items(), desc="重複画像の保存"):
-        if args.save_dir_duplicate:
-            for duplicate in duplicates:
-                dest_path = os.path.join(args.save_dir_duplicate, os.path.basename(duplicate)) if not args.preserve_own_folder else os.path.join(args.save_dir_duplicate, os.path.relpath(duplicate, args.dir))
-                shutil.copy2(duplicate, dest_path)
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dir", required=True, help="処理対象ディレクトリ")
-    parser.add_argument("--save_dir", default="output/", help="出力ディレクトリ")
-    parser.add_argument("--extension", default="jpg png webp", help="処理対象となるファイル拡張子")
-    parser.add_argument("--recursive", action="store_true", help="サブディレクトリも探索する")
-    parser.add_argument("--debug", action="store_true", help="デバッグモード")
-    parser.add_argument("--threshold", type=int, default=10, help="画像類似度の判定しきい値")
-    parser.add_argument("--preserve_own_folder", action="store_true", help="元のフォルダ名で保存")
-    parser.add_argument("--preserve_structure", action="store_true", help="ディレクトリ構造を保持して保存")
-    parser.add_argument("--gc_disable", action="store_true", help="ガベージコレクションを無効にする")
-    parser.add_argument("--by_folder", action="store_true", help="フォルダごとに処理")
-    parser.add_argument("--batch_size", type=int, default=10, help="バッチサイズ")
-    parser.add_argument("--save_dir_duplicate", help="重複判定された画像を保存するディレクトリ")
-    parser.add_argument("--mem_cache", default="ON", help="メモリキャッシュを使用するかどうか")
-    args = parser.parse_args()
-
-    if args.debug:
-        print("デバッグモードで実行します。")
+    if args.by_folder:
+        folders = [f.path for f in os.scandir(args.dir) if f.is_dir()]
+        for folder in folders:
+            folder_files = get_image_files(folder, extensions, args.recursive)
+            remove_duplicates(folder_files, args.threshold, args.save_dir, args.save_dir_duplicate, args.debug, args)
     else:
-        process_images(args)
+        remove_duplicates(image_files, args.threshold, args.save_dir, args.save_dir_duplicate, args.debug, args)
 
+    if args.gc_disable:
+        gc.enable()
+
+if __name__ == '__main__':
+    main()
