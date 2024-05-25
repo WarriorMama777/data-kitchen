@@ -54,10 +54,12 @@ def get_image_files(directory, extensions, recursive=False):
             break
     return image_files
 
-def remove_duplicates(image_files, threshold, save_dir, save_dir_duplicate, debug, args):
+def remove_duplicates(image_files, threshold, save_dir, save_dir_duplicate, debug, mem_cache, args):
     hash_dict = {}
     duplicates = []
     saved_images_count = 0  # 保存された画像の数を追跡
+    first_duplicate_saved = False  # 最初の重複画像が保存されたかどうか
+    cache = []  # メモリキャッシュ用
 
     for img_path in tqdm(image_files, desc="Processing images"):
         try:
@@ -70,7 +72,11 @@ def remove_duplicates(image_files, threshold, save_dir, save_dir_duplicate, debu
             is_duplicate = False
             for existing_hash in hash_dict.keys():
                 if bin(img_hash ^ existing_hash).count('1') <= threshold:
-                    duplicates.append((img_path, hash_dict[existing_hash]))
+                    if not first_duplicate_saved:
+                        hash_dict[img_hash] = img_path  # 最初の重複画像を保存
+                        first_duplicate_saved = True
+                    else:
+                        duplicates.append((img_path, hash_dict[existing_hash]))
                     is_duplicate = True
                     break
 
@@ -85,8 +91,7 @@ def remove_duplicates(image_files, threshold, save_dir, save_dir_duplicate, debu
         return
 
     ensure_directory(save_dir)
-    if save_dir_duplicate:
-        ensure_directory(save_dir_duplicate)
+    ensure_directory(save_dir_duplicate)
 
     # `--preserve_own_folder`が有効な場合の処理
     if args.preserve_own_folder:
@@ -94,30 +99,46 @@ def remove_duplicates(image_files, threshold, save_dir, save_dir_duplicate, debu
         save_dir = os.path.join(save_dir, base_folder_name)
         ensure_directory(save_dir)
 
-    for img_hash, img_path in hash_dict.items():
-        relative_path = os.path.relpath(img_path, start=os.path.commonpath([img_path, args.dir]))
-        if args.preserve_structure or args.preserve_own_folder:
-            dest_path = os.path.join(save_dir, relative_path)
-        else:
-            dest_path = os.path.join(save_dir, os.path.basename(img_path))
-        ensure_directory(os.path.dirname(dest_path))
-        shutil.copyfile(img_path, dest_path)
-        saved_images_count += 1  # 成功した保存ごとにカウントアップ
+    if mem_cache == 'ON':
+        for img_hash, img_path in hash_dict.items():
+            cache.append((img_path, os.path.commonpath([img_path, args.dir])))
+        for duplicate, original in duplicates:
+            cache.append((duplicate, save_dir_duplicate))
+    else:
+        for img_hash, img_path in hash_dict.items():
+            process_image_save(img_path, save_dir, args)
+            saved_images_count += 1  # 成功した保存ごとにカウントアップ
+        for duplicate, original in duplicates:
+            process_duplicate_save(duplicate, original, save_dir_duplicate, args)
 
-    for duplicate, original in duplicates:
-        if save_dir_duplicate:
-            relative_path = os.path.relpath(duplicate, start=os.path.commonpath([duplicate, save_dir_duplicate]))
-            if args.preserve_structure:
-                dest_path = os.path.join(save_dir_duplicate, relative_path)
+    if mem_cache == 'ON':
+        for img_path, base_dir in cache:
+            if img_path in dict(duplicates):
+                process_duplicate_save(img_path, dict(duplicates)[img_path], save_dir_duplicate, args)
             else:
-                dest_path = os.path.join(save_dir_duplicate, os.path.basename(duplicate))
-            ensure_directory(os.path.dirname(dest_path))
-            shutil.copyfile(duplicate, dest_path)
-        else:
-            os.remove(duplicate)
+                process_image_save(img_path, save_dir, args)
+                saved_images_count += 1
 
     print(f"Saved images: {saved_images_count}")
     print(f"Removed duplicates: {len(duplicates)}")
+
+def process_image_save(img_path, save_dir, args):
+    relative_path = os.path.relpath(img_path, start=os.path.commonpath([img_path, args.dir]))
+    if args.preserve_structure or args.preserve_own_folder:
+        dest_path = os.path.join(save_dir, relative_path)
+    else:
+        dest_path = os.path.join(save_dir, os.path.basename(img_path))
+    ensure_directory(os.path.dirname(dest_path))
+    shutil.copyfile(img_path, dest_path)
+
+def process_duplicate_save(duplicate, original, save_dir_duplicate, args):
+    relative_path = os.path.relpath(duplicate, start=os.path.commonpath([duplicate, save_dir_duplicate]))
+    if args.preserve_structure:
+        dest_path = os.path.join(save_dir_duplicate, relative_path)
+    else:
+        dest_path = os.path.join(save_dir_duplicate, os.path.basename(duplicate))
+    ensure_directory(os.path.dirname(dest_path))
+    shutil.copyfile(duplicate, dest_path)
 
 def main():
     args = parse_arguments()
@@ -132,9 +153,9 @@ def main():
         folders = [f.path for f in os.scandir(args.dir) if f.is_dir()]
         for folder in folders:
             folder_files = get_image_files(folder, extensions, args.recursive)
-            remove_duplicates(folder_files, args.threshold, args.save_dir, args.save_dir_duplicate, args.debug, args)
+            remove_duplicates(folder_files, args.threshold, args.save_dir, args.save_dir_duplicate, args.debug, args.mem_cache, args)
     else:
-        remove_duplicates(image_files, args.threshold, args.save_dir, args.save_dir_duplicate, args.debug, args)
+        remove_duplicates(image_files, args.threshold, args.save_dir, args.save_dir_duplicate, args.debug, args.mem_cache, args)
 
     if args.gc_disable:
         gc.enable()
