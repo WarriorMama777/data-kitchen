@@ -1,100 +1,92 @@
+import argparse
 import os
-import sys
 import signal
-from wand.image import Image
-from argparse import ArgumentParser
-import concurrent.futures
-import multiprocessing
-from tqdm import tqdm
+import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
-# Ctrl+Cでの終了を処理
+from tqdm import tqdm
+from wand.image import Image
+
+# Ctrl+Cで安全に停止させるためのハンドラ設定
 def signal_handler(sig, frame):
     sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
 
-# 引数を処理
-parser = ArgumentParser(description="Image processing script.")
-parser.add_argument("--dir", required=True, help="Directory of images to process.")
-parser.add_argument("--save_dir", default="output/", help="Directory to save processed images.")
-parser.add_argument("--extension", nargs="+", help="File extensions to process.")
-parser.add_argument("--recursive", action="store_true", help="Process images in subdirectories.")
-parser.add_argument("--background", help="Background color code.")
-parser.add_argument("--resize", type=int, help="Resize images to this size on the longest side.")
-parser.add_argument("--format", help="Format to convert images to.")
-parser.add_argument("--quality", type=int, help="Quality of the output image.")
-parser.add_argument("--debug", action="store_true", help="Run in debug mode without actual processing.")
-parser.add_argument("--preserve_own_folder", action="store_true", help="Preserve the original directory's name.")
-parser.add_argument("--preserve_structure", action="store_true", help="Preserve the directory structure.")
-parser.add_argument("--gc_disable", action="store_true", help="Disable garbage collection.")
-parser.add_argument("--by_folder", action="store_true", help="Process each folder separately.")
-parser.add_argument("--mem_cache", default="ON", choices=["ON", "OFF"], help="Toggle memory caching.")
-parser.add_argument("--threads", type=int, default=multiprocessing.cpu_count(), help="Number of threads to use.")
-
+# 引数の解析
+parser = argparse.ArgumentParser(description="画像変換スクリプト")
+parser.add_argument("--dir", required=True, help="処理対象ディレクトリ")
+parser.add_argument("--save_dir", default="output/", help="出力ディレクトリ")
+parser.add_argument("--extension", nargs="+", help="処理対象となるファイルの拡張子")
+parser.add_argument("--recursive", action="store_true", help="サブディレクトリも含めて探索")
+parser.add_argument("--background", help="透過画像の背景色 例：#ffffff")
+parser.add_argument("--resize", type=int, help="リサイズする長辺のサイズ")
+parser.add_argument("--format", help="変換後の画像形式")
+parser.add_argument("--quality", type=int, help="画像品質")
+parser.add_argument("--comp", type=int, help="画像圧縮の強度")
+parser.add_argument("--debug", action="store_true", help="デバッグモード")
+parser.add_argument("--preserve_own_folder", action="store_true", help="元のフォルダ名を保持")
+parser.add_argument("--preserve_structure", action="store_true", help="ディレクトリ構造を保持")
+parser.add_argument("--gc_disable", action="store_true", help="ガベージコレクションを無効化")
+parser.add_argument("--by_folder", action="store_true", help="フォルダごとに処理")
+parser.add_argument("--mem_cache", choices=["ON", "OFF"], default="ON", help="メモリキャッシュの使用")
+parser.add_argument("--threads", type=int, default=4, help="使用するスレッド数")  # スレッド数のデフォルト値を設定
 args = parser.parse_args()
 
-if args.gc_disable:
-    import gc
-    gc.disable()
+# 出力ディレクトリの作成
+Path(args.save_dir).mkdir(parents=True, exist_ok=True)
 
-# ディレクトリが存在しない場合は作成
-if not os.path.exists(args.save_dir):
-    os.makedirs(args.save_dir)
-
-# 処理するファイルのリストを取得
-def get_files_to_process(directory, extensions, recursive):
-    files_to_process = []
-    for root, dirs, files in os.walk(directory):
-        for file in files:
-            if any(file.endswith(ext) for ext in extensions):
-                files_to_process.append(os.path.join(root, file))
-        if not recursive:
-            break
-    return files_to_process
-
-# 画像処理関数
-def process_image(file_path):
+def process_image(image_path):
     try:
-        with Image(filename=file_path) as img:
-            if args.background:
-                img.background_color = args.background
+        with Image(filename=image_path) as img:
+            # リサイズ処理
             if args.resize:
                 img.transform(resize=f"{args.resize}x{args.resize}>")
-            if args.format:
-                img.format = args.format
+            # 背景色設定
+            if args.background:
+                img.background_color = args.background
+                img.alpha_channel = 'remove'
+            # 画質設定
             if args.quality:
                 img.compression_quality = args.quality
-
-            # 出力パスの生成
-            relative_path = os.path.relpath(file_path, args.dir)
-            if args.preserve_structure or args.preserve_own_folder:
-                output_path = os.path.join(args.save_dir, relative_path)
-            else:
-                output_path = os.path.join(args.save_dir, os.path.basename(file_path))
-
+            # 形式変換
             if args.format:
-                output_path = os.path.splitext(output_path)[0] + f".{args.format}"
+                img.format = args.format
 
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
-            if not args.debug:
-                img.save(filename=output_path)
-
-            return file_path, True
+            # 出力ファイルパスの生成
+            if args.preserve_own_folder:
+                save_path = Path(args.save_dir) / Path(args.dir).name / image_path.relative_to(args.dir).with_suffix(f".{args.format}" if args.format else image_path.suffix)
+            else:
+                save_path = Path(args.save_dir) / image_path.relative_to(args.dir).with_suffix(f".{args.format}" if args.format else image_path.suffix)
+            
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            img.save(filename=save_path)
     except Exception as e:
-        return file_path, False
+        print(f"Error processing {image_path}: {e}")
 
-# メイン処理
+def find_images(directory, extensions):
+    if args.recursive:
+        return [f for ext in extensions for f in Path(directory).rglob(f"*.{ext}")]
+    else:
+        return [f for ext in extensions for f in Path(directory).glob(f"*.{ext}")]
+
 def main():
-    files_to_process = get_files_to_process(args.dir, args.extension, args.recursive)
+    if args.gc_disable:
+        import gc
+        gc.disable()
+    
+    images = find_images(args.dir, args.extension)
+    
+    if args.debug:
+        print("デバッグモード：以下のファイルが処理されます")
+        for img in images:
+            print(img)
+        return
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=args.threads) as executor:
-        tasks = [executor.submit(process_image, file) for file in files_to_process]
-
-        for future in tqdm(concurrent.futures.as_completed(tasks), total=len(tasks), desc="Processing Images"):
-            file, success = future.result()
-            if args.debug:
-                print(f"Processed {file}: {'Success' if success else 'Failed'}")
+    with ThreadPoolExecutor(max_workers=args.threads) as executor:
+        futures = [executor.submit(process_image, img) for img in images]
+        list(tqdm(as_completed(futures), total=len(images), desc="Processing Images"))
 
 if __name__ == "__main__":
     main()
