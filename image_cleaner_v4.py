@@ -9,15 +9,15 @@ import signal
 import gc
 import shutil
 
-# dhash implementation
+# dhashの実装
 def dhash(image, hash_size=8):
     resized = cv2.resize(image, (hash_size + 1, hash_size))
     diff = resized[:, 1:] > resized[:, :-1]
     return sum([2 ** i for (i, v) in enumerate(diff.flatten()) if v])
 
-# Signal handler for safe termination
+# 安全終了のためのシグナルハンドラ
 def signal_handler(sig, frame):
-    print('Process interrupted! Exiting gracefully...')
+    print('処理が中断されました！安全に終了します...')
     exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
@@ -59,30 +59,40 @@ def remove_duplicates(image_files, threshold, save_dir, save_dir_duplicate, debu
     duplicates = []
     saved_images_count = 0  # 保存された画像の数を追跡
     cache = []  # メモリキャッシュ用
+    process_group = args.process_group  # process_groupの値を取得
 
-    for img_path in tqdm(image_files, desc="Processing images"):
-        try:
-            image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-            if image is None:
-                continue
+    # 画像ファイルをprocess_groupの数に応じて分割
+    grouped_image_files = [image_files[i:i + process_group] for i in range(0, len(image_files), process_group)]
 
-            img_hash = dhash(image)
+    for group in tqdm(grouped_image_files, desc="Processing image groups"):
+        hash_dict_group = {}  # 各グループごとにハッシュを管理
+        for img_path in group:
+            try:
+                image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+                if image is None:
+                    continue
 
-            is_duplicate = False
-            for existing_hash in hash_dict.keys():
-                if bin(img_hash ^ existing_hash).count('1') <= threshold:
-                    duplicates.append((img_path, hash_dict[existing_hash]))
-                    is_duplicate = True
-                    break
+                img_hash = dhash(image)
 
-            if not is_duplicate:
-                hash_dict[img_hash] = img_path
+                # 同じグループ内の画像との類似判定
+                is_duplicate = False
+                for existing_hash in hash_dict_group.keys():
+                    if bin(img_hash ^ existing_hash).count('1') <= threshold:
+                        duplicates.append((img_path, hash_dict_group[existing_hash]))
+                        is_duplicate = True
+                        break
 
-        except Exception as e:
-            print(f"Error processing {img_path}: {e}")
+                if not is_duplicate:
+                    hash_dict_group[img_hash] = img_path
+
+            except Exception as e:
+                print(f"Error processing {img_path}: {e}")
+
+        # グループごとの結果を全体のハッシュ辞書にマージ
+        hash_dict.update(hash_dict_group)
 
     if debug:
-        print("Debug mode enabled. No files will be moved.")
+        print("デバッグモードが有効です。ファイルは移動されません。")
         return
 
     ensure_directory(save_dir)
@@ -117,8 +127,8 @@ def remove_duplicates(image_files, threshold, save_dir, save_dir_duplicate, debu
                 process_image_save(img_path, save_dir, args)
                 saved_images_count += 1
 
-    print(f"Saved images: {saved_images_count}")
-    print(f"Removed duplicates: {len(duplicates)}")
+    print(f"保存された画像: {saved_images_count}")
+    print(f"削除された重複: {len(duplicates)}")
 
 def process_image_save(img_path, save_dir, args):
     relative_path = os.path.relpath(img_path, start=os.path.commonpath([img_path, args.dir]))
