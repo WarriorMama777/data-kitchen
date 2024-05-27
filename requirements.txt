@@ -8,5 +8,3 @@ imutils
 numba
 psutil
 imagehash
-annoy
-voyager
