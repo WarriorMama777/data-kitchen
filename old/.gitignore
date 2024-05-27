@@ -10,4 +10,3 @@ node_modules/
 target/
 **/*.rs.bk
 Cargo.lock
-node_modules/
