@@ -64,60 +64,52 @@ def modify_name(index, base_name, num_length, args):
         new_name = new_name + args.add_last
 
     if args.add_number_first:
-        new_name = f"{i:0{num_length}d}_" + new_name
+        new_name = f"{index:0{num_length}d}_" + new_name
 
     if args.add_number_last:
-        new_name = new_name + f"_{i:0{num_length}d}"
+        new_name = new_name + f"_{index:0{num_length}d}"
 
-    # --replaceオプションの処理
+    # --replaceオプションの処理を拡張
     if args.replace:
-        old, new = args.replace
-        # スペース、コンマ、ドットを含む可能性がある部分を正規表現でマッチさせるパターンに変更
-        # エスケープが必要な特殊文字自体はエスケープしつつ、スペース、コンマ、ドットの連続を考慮
-        old_pattern = re.sub(r'\\([\ ,\.])', r'[\ \.,]+', re.escape(old))
-        pattern = re.compile(old_pattern)
-        new_name = pattern.sub(new, new_name)
+        old_patterns = re.split(r',|\|| ', args.replace[0])  # 引数での区切りサポートを追加
+        new_str = args.replace[1]
+        for old_pattern in old_patterns:
+            pattern = re.compile(re.escape(old_pattern))
+            new_name = pattern.sub(new_str, new_name)
 
-    # 指定した文字以降を削除
     if args.del_after:
         pos = new_name.find(args.del_after)
         if pos != -1:
             new_name = new_name[:pos + len(args.del_after)]
 
-    # 指定した文字以前を削除
     if args.del_before:
         pos = new_name.find(args.del_before)
         if pos != -1:
             new_name = new_name[pos:]
 
-    # 指定した文字の後ろに文字を追加
     if args.add_after:
         search_str, add_str = args.add_after.split(",")
         pos = new_name.find(search_str)
         if pos != -1:
             new_name = new_name[:pos + len(search_str)] + add_str + new_name[pos + len(search_str):]
 
-    # 指定した文字の前に文字を追加
     if args.add_before:
         search_str, add_str = args.add_before.split(",")
         pos = new_name.find(search_str)
         if pos != -1:
             new_name = new_name[:pos] + add_str + new_name[pos:]
 
-    # --reg_delの処理
     if args.reg_del:
         pattern = re.compile(args.reg_del)
         new_name = pattern.sub('', new_name)
 
-    # --reg_del_aroundの処理
     if args.reg_del_around:
         pattern = re.compile(args.reg_del_around)
         match = pattern.search(new_name)
         if match:
             new_name = new_name[match.start():match.end()]
         else:
-            # マッチしなかった場合はファイル名を変更しない
-            new_name = filename
+            new_name = base_name  # 修正: マッチしなかった場合の処理を明確化
 
     return new_name
 
@@ -133,7 +125,7 @@ if __name__ == "__main__":
     parser.add_argument("--add_last", type=str, help="末尾に文字を追加")
     parser.add_argument("--add_number_first", action='store_true', help="先頭に連番を追加")
     parser.add_argument("--add_number_last", action='store_true', help="末尾に連番を追加")
-    parser.add_argument("--replace", nargs=2, help="文字を置換する(例: '--replace \"neko\" \"piyo\"')")
+    parser.add_argument("--replace", nargs=2, help="文字を置換する(複数の対象を指定可能、例: '--replace \"inu, usagi\" \"neko\"')")
     parser.add_argument("--del_after", type=str, help="指定した文字以降を削除")
     parser.add_argument("--del_before", type=str, help="指定した文字以前を削除")
     parser.add_argument("--add_after", type=str, help="指定した文字の後ろに文字を追加 (形式: '検索文字列,追加文字列')")
@@ -148,4 +140,3 @@ if __name__ == "__main__":
         rename_files(args.dir, args, is_recursive=True)
     else:
         rename_files(args.dir, args)
-
