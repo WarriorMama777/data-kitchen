@@ -1,7 +1,6 @@
 import argparse
 import os
 import re
-import sys
 from tqdm import tqdm
 
 def rename_files(directory, args, is_recursive=False, level=0):
@@ -69,10 +68,10 @@ def modify_name(index, base_name, num_length, args):
     if args.add_number_last:
         new_name = new_name + f"_{index:0{num_length}d}"
 
-    # --replaceオプションの処理を拡張
+    # --replaceオプションの処理を修正
     if args.replace:
-        old_patterns = re.split(r',|\|| ', args.replace[0])  # 引数での区切りサポートを追加
-        new_str = args.replace[1]
+        old_patterns = args.replace[:-1]
+        new_str = args.replace[-1]
         for old_pattern in old_patterns:
             pattern = re.compile(re.escape(old_pattern))
             new_name = pattern.sub(new_str, new_name)
@@ -114,25 +113,25 @@ def modify_name(index, base_name, num_length, args):
     return new_name
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="ファイル名を変更するスクリプト")
-    parser.add_argument("--dir", type=str, required=True, help="作業対象のディレクトリ")
-    parser.add_argument("--folder", action='store_true', help="フォルダ名のみを対象にする")
-    parser.add_argument("--file", action='store_true', help="ファイル名のみを対象にする")
-    parser.add_argument("--recursive", action='store_true', help="サブディレクトリ含め全てのファイル/フォルダを対象にする")
-    parser.add_argument("--del_first", type=int, help="先頭の文字を指定された数だけ削除")
-    parser.add_argument("--del_last", type=int, help="末尾の文字を指定された数だけ削除")
-    parser.add_argument("--add_first", type=str, help="先頭に文字を追加")
-    parser.add_argument("--add_last", type=str, help="末尾に文字を追加")
-    parser.add_argument("--add_number_first", action='store_true', help="先頭に連番を追加")
-    parser.add_argument("--add_number_last", action='store_true', help="末尾に連番を追加")
-    parser.add_argument("--replace", nargs=2, help="文字を置換する(複数の対象を指定可能、例: '--replace \"inu, usagi\" \"neko\"')")
-    parser.add_argument("--del_after", type=str, help="指定した文字以降を削除")
-    parser.add_argument("--del_before", type=str, help="指定した文字以前を削除")
-    parser.add_argument("--add_after", type=str, help="指定した文字の後ろに文字を追加 (形式: '検索文字列,追加文字列')")
-    parser.add_argument("--add_before", type=str, help="指定した文字の前に文字を追加 (形式: '検索文字列,追加文字列')")
-    parser.add_argument("--del_reg", type=str, help="正規表現でマッチした箇所を削除", dest="reg_del")  # 引数名称変更
-    parser.add_argument("--del_reg_around", type=str, help="正規表現でマッチした箇所以外を削除", dest="reg_del_around")  # 引数名称変更
-    parser.add_argument("--debug", action='store_true', help="デバッグモード：ファイル名の変更を行わずに情報のみを表示")
+    parser = argparse.ArgumentParser(description="ファイル名を一括で変更するスクリプト")
+    parser.add_argument("--dir", type=str, help="対象ディレクトリ")
+    parser.add_argument("--recursive", action="store_true", help="再帰的に処理を行う")
+    parser.add_argument("--folder", action="store_true", help="フォルダを対象に含める")
+    parser.add_argument("--file", action="store_true", help="ファイルを対象に含める")
+    parser.add_argument("--del_first", type=int, help="先頭から削除する文字数")
+    parser.add_argument("--del_last", type=int, help="末尾から削除する文字数")
+    parser.add_argument("--add_first", type=str, help="先頭に追加する文字列")
+    parser.add_argument("--add_last", type=str, help="末尾に追加する文字列")
+    parser.add_argument("--add_number_first", action="store_true", help="先頭に番号を追加する")
+    parser.add_argument("--add_number_last", action="store_true", help="末尾に番号を追加する")
+    parser.add_argument("--replace", nargs='+', help="指定文字列を置換 (最後に定義された文字列を置換先として扱う) 例：--replace \"置換元A\" \"置換元B\" \"置換先\"")
+    parser.add_argument("--del_after", type=str, help="指定文字列の後を削除")
+    parser.add_argument("--del_before", type=str, help="指定文字列の前を削除")
+    parser.add_argument("--add_after", type=str, help="指定文字列の後に追加 (カンマで区切る)")
+    parser.add_argument("--add_before", type=str, help="指定文字列の前に追加 (カンマで区切る)")
+    parser.add_argument("--reg_del", type=str, help="正規表現で一致した部分を削除")
+    parser.add_argument("--reg_del_around", type=str, help="正規表現で一致した部分を残し、それ以外を削除")
+    parser.add_argument("--debug", action="store_true", help="デバッグモード")
 
     args = parser.parse_args()
 
