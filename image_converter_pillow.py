@@ -40,6 +40,11 @@ def process_image(file_path, args, save_dir):
                 if not img.mode in ('RGBA', 'LA'):
                     raise ValueError("Image does not have an alpha channel")
                 alpha = img.split()[-1]
+                
+                # アルファチャンネルが完全に不透明なら保存しない
+                if alpha.getextrema() == (255, 255):
+                    return
+                
                 img = alpha.convert("L")
             
             if args.background and img.mode in ('RGBA', 'LA'):
