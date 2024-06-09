@@ -26,6 +26,7 @@ def parse_args():
     parser.add_argument('--by_folder', action='store_true', help='Process folders one by one')
     parser.add_argument('--mem_cache', default='ON', choices=['ON', 'OFF'], help='Use memory cache')
     parser.add_argument('--threads', type=int, help='Number of threads to use')
+    parser.add_argument('--save_only_alphachannel', action='store_true', help='Save only alpha channel data')
     return parser.parse_args()
 
 def signal_handler(sig, frame):
@@ -35,12 +36,20 @@ def signal_handler(sig, frame):
 def process_image(file_path, args, save_dir):
     try:
         with Image.open(file_path) as img:
+            if args.save_only_alphachannel:
+                if not img.mode in ('RGBA', 'LA'):
+                    raise ValueError("Image does not have an alpha channel")
+                alpha = img.split()[-1]
+                img = alpha.convert("L")
+            
             if args.background and img.mode in ('RGBA', 'LA'):
                 background = Image.new(img.mode[:-1], img.size, "#" + args.background)
                 background.paste(img, img.split()[-1])
                 img = background
+            
             if args.resize:
                 img.thumbnail((args.resize, args.resize), Image.Resampling.LANCZOS)
+            
             save_path = os.path.join(save_dir, os.path.splitext(os.path.basename(file_path))[0] + '.' + (args.format or img.format.lower()))
             save_kwargs = {}
             if args.format:
@@ -48,8 +57,6 @@ def process_image(file_path, args, save_dir):
             if args.quality:
                 save_kwargs['quality'] = args.quality
             if args.comp:
-                # 'compress_level' is not a universal keyword for img.save(), it depends on the format.
-                # For PNGs, it's valid as 'compression' (0-9), but it's best to check documentation for specific formats.
                 save_kwargs['compression'] = args.comp
             img.save(save_path, **save_kwargs)
     except Exception as e:
@@ -78,6 +85,18 @@ def main():
     
     if args.gc_disable:
         gc.disable()
+
+    # エラー処理の追加
+    if args.save_only_alphachannel:
+        if args.extension and any(ext.lower() not in ['png', 'webp'] for ext in args.extension):
+            print("Error: --save_only_alphachannel is only supported for PNG and WebP formats.")
+            sys.exit(1)
+        if args.format and args.format.lower() not in ['png', 'webp']:
+            print("Error: --save_only_alphachannel is only supported for PNG and WebP formats.")
+            sys.exit(1)
+        if args.background:
+            print("Error: --save_only_alphachannel cannot be used with --background.")
+            sys.exit(1)
 
     if args.by_folder:
         for subdir in os.listdir(args.dir):

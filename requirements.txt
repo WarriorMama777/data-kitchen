@@ -8,3 +8,4 @@ imutils
 numba
 psutil
 imagehash
+huggingface_hub
