@@ -9,7 +9,6 @@ from PIL import Image
 
 # OpenRouter APIの設定
 API_URL = "https://api.openrouter.ai/v1/requests"
-API_KEY = "your_openrouter_api_key_here"
 
 # SIGINT (Ctrl+C) ハンドリング
 def signal_handler(sig, frame):
@@ -19,15 +18,15 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 # 画像キャプション生成関数
-def generate_caption(image_path):
+def generate_caption(image_path, api_key):
     with open(image_path, 'rb') as img_file:
         files = {'file': img_file}
         headers = {
-            'Authorization': f'Bearer {API_KEY}',
+            'Authorization': f'Bearer {api_key}',
             'User-Agent': 'Mozilla/5.0'
         }
         data = {
-            'model': 'liuhaotian/llava-13b',
+            'model': 'liuhaotian/llava-yi-34b',
             'task': 'captioning'
         }
         
@@ -69,7 +68,7 @@ def main(args):
             caption = None
             retries = 3
             while retries > 0 and not caption:
-                caption = generate_caption(image_path)
+                caption = generate_caption(image_path, args.api_key)
                 retries -= 1
             if caption:
                 save_file = save_path / (image_path.stem + ".txt")
@@ -87,6 +86,7 @@ if __name__ == "__main__":
     parser.add_argument('--extension', default="jpg png webp", help='File extensions to process (default: jpg png webp).')
     parser.add_argument('--recursive', action='store_true', help='Recursively process subdirectories.')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode.')
+    parser.add_argument('--api_key', required=True, help='API key for OpenRouter.')
 
     args = parser.parse_args()
     main(args)
