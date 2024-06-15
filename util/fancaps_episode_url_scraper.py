@@ -38,7 +38,7 @@ def fetch_episode_urls(anime_url, headers, verbose):
     return episode_urls
 
 def main():
-    parser = argparse.ArgumentParser(description='Fetch Fancaps episode URLs.')
+    parser = argparse.ArgumentParser(description='A script to obtain episode-specific URLs based on the URLs of each work obtained with `fancaps_url_scraper.py`.')
     parser.add_argument('--dir', type=str, help='Path to the input URL list file.', required=True)
     parser.add_argument('--save_dir', type=str, help='Directory to save the episode URLs file.', required=True)
     parser.add_argument('--verbose', action='store_true', help='Increase output verbosity')
