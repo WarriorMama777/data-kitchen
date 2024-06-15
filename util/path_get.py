@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 import signal
 from pathlib import Path
 
@@ -9,6 +10,9 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
+
+def natural_sort_key(s, _nsre=re.compile('([0-9]+)')):
+    return [int(text) if text.isdigit() else text.lower() for text in re.split(_nsre, str(s))]
 
 def write_path(file, path, quote):
     if quote:
@@ -31,6 +35,18 @@ def process_paths(target_dir, recursive, target, quote, debug):
     
     return paths
 
+def sort_paths(paths, order, reverse):
+    if order == 'name':
+        return sorted(paths, key=natural_sort_key, reverse=reverse)
+    elif order == 'size':
+        return sorted(paths, key=lambda p: p.stat().st_size, reverse=reverse)
+    elif order == 'mtime':
+        return sorted(paths, key=lambda p: p.stat().st_mtime, reverse=reverse)
+    elif order == 'ctime':
+        return sorted(paths, key=lambda p: p.stat().st_ctime, reverse=reverse)
+    else:
+        return paths
+
 def main():
     parser = argparse.ArgumentParser(description='指定されたディレクトリ内のフォルダまたはファイルの絶対パスを取得してテキストファイルに保存します。')
     parser.add_argument('--dir', required=True, help='処理対象ディレクトリ')
@@ -40,6 +56,8 @@ def main():
     parser.add_argument('--mem_cache', default='ON', choices=['ON', 'OFF'], help='メモリキャッシュの使用')
     parser.add_argument('--quote', action='store_true', help='パスをダブルクオートで囲む')
     parser.add_argument('--target', default='folder', choices=['folder', 'file'], help='取得するパスの対象')
+    parser.add_argument('--order', default='name', choices=['name', 'size', 'mtime', 'ctime'], help='パスの並び順')
+    parser.add_argument('--reverse', action='store_true', help='降順に並べ替える')
     args = parser.parse_args()
 
     target_dir = Path(args.dir)
@@ -50,12 +68,14 @@ def main():
     with save_dir.joinpath('paths.txt').open('w', encoding='utf-8') as f:
         if args.mem_cache == 'ON':
             paths = process_paths(target_dir, args.recursive, args.target, args.quote, args.debug)
+            paths = sort_paths(paths, args.order, args.reverse)
             for path in paths:
                 write_path(f, path, args.quote)
                 if args.debug:
                     print(f'{args.target.capitalize()}を発見: {path}')
         else:
             paths = process_paths(target_dir, args.recursive, args.target, args.quote, args.debug)
+            paths = sort_paths(paths, args.order, args.reverse)
             for path in paths:
                 write_path(f, path, args.quote)
                 if args.debug:
