@@ -47,6 +47,14 @@ def sort_paths(paths, order, reverse):
     else:
         return paths
 
+def get_next_output_file(save_dir):
+    counter = 1
+    while True:
+        output_file = save_dir / f'paths_{counter}.txt'
+        if not output_file.exists():
+            return output_file
+        counter += 1
+
 def main():
     parser = argparse.ArgumentParser(description='指定されたディレクトリ内のフォルダまたはファイルの絶対パスを取得してテキストファイルに保存します。')
     parser.add_argument('--dir', required=True, help='処理対象ディレクトリ')
@@ -65,7 +73,9 @@ def main():
 
     os.makedirs(save_dir, exist_ok=True)
 
-    with save_dir.joinpath('paths.txt').open('w', encoding='utf-8') as f:
+    output_file = get_next_output_file(save_dir)
+
+    with output_file.open('w', encoding='utf-8') as f:
         if args.mem_cache == 'ON':
             paths = process_paths(target_dir, args.recursive, args.target, args.quote, args.debug)
             paths = sort_paths(paths, args.order, args.reverse)
@@ -81,7 +91,7 @@ def main():
                 if args.debug:
                     print(f'{args.target.capitalize()}を発見: {path}')
 
-    print('処理が完了しました。')
+    print(f'処理が完了しました。出力ファイル: {output_file}')
 
 if __name__ == '__main__':
     main()
