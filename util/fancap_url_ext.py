@@ -34,6 +34,7 @@ def extract_urls(content):
 def process_files(input_path, output_dir, debug):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+        print(f"出力ディレクトリを作成しました: {output_dir}")
     
     if os.path.isdir(input_path):
         files = [os.path.join(input_path, f) for f in os.listdir(input_path) if os.path.isfile(os.path.join(input_path, f))]
@@ -55,6 +56,7 @@ def process_files(input_path, output_dir, debug):
                     with open(output_file, 'w', encoding='utf-8') as out_file:
                         for url in extracted_urls:
                             out_file.write(url + '\n')
+                    print(f"ファイルが正常に保存されました: {output_file}")
         except Exception as e:
             print(f"エラー: {file_path} の処理中に問題が発生しました。詳細: {e}")
 
