@@ -12,7 +12,7 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 # Function to extract necessary URLs
-def extract_urls(content):
+def extract_urls(content, add_middle_url=False):
     urls = content.split('\n')
     url_dict = {}
     for url in urls:
@@ -25,13 +25,17 @@ def extract_urls(content):
     
     result_urls = []
     for key in url_dict:
-        result_urls.append(url_dict[key][0])
-        result_urls.append(url_dict[key][-1])
+        episodes = url_dict[key]
+        result_urls.append(episodes[0])  # 最初のエピソード
+        if add_middle_url and len(episodes) > 2:
+            middle_index = len(episodes) // 2
+            result_urls.append(episodes[middle_index])  # 中央のエピソード
+        result_urls.append(episodes[-1])  # 最後のエピソード
     
     return result_urls
 
 # Main function to process files
-def process_files(input_path, output_dir, debug):
+def process_files(input_path, output_dir, debug, add_middle_url):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
         print(f"出力ディレクトリを作成しました: {output_dir}")
@@ -45,7 +49,7 @@ def process_files(input_path, output_dir, debug):
         try:
             with open(file_path, 'r', encoding='utf-8') as file:
                 content = file.read()
-                extracted_urls = extract_urls(content)
+                extracted_urls = extract_urls(content, add_middle_url)
                 
                 if debug:
                     print(f"デバッグモード: {file_path} の処理結果")
@@ -66,9 +70,10 @@ def main():
     parser.add_argument('--dir', required=True, help='処理対象ディレクトリまたはファイル')
     parser.add_argument('--save_dir', default='./output', help='出力ディレクトリのパス')
     parser.add_argument('--debug', action='store_true', help='デバッグモードを有効にする')
+    parser.add_argument('--add_middle_url', action='store_true', help='最初と最後のエピソードに加え、中央値のエピソードも含める')
     args = parser.parse_args()
 
-    process_files(args.dir, args.save_dir, args.debug)
+    process_files(args.dir, args.save_dir, args.debug, args.add_middle_url)
 
 if __name__ == "__main__":
     main()
