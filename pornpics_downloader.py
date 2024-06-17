@@ -52,8 +52,8 @@ def getting_post_urls(keyword, save_dir):
         print(f"Error fetching post URLs: {e}")
         sys.exit(1)
 
-# Function to get image URLs and metadata
-def getting_image_urls_and_metadata(keyword, save_dir, write_metadata):
+# Function to get image URLs
+def getting_image_urls(keyword, save_dir):
     try:
         post_links_path = os.path.join(save_dir, f'{keyword}_post_links.txt')
         with open(post_links_path, 'r') as file:
@@ -77,19 +77,44 @@ def getting_image_urls_and_metadata(keyword, save_dir, write_metadata):
         }
 
         image_urls = []
-        metadata_list = []
+        metadata = []
 
-        for url in tqdm(post_urls, desc="Fetching image URLs and metadata", unit="URL"):
+        for url in tqdm(post_urls, desc="Fetching image URLs", unit="URL"):
             try:
                 response = requests.get(url.strip(), headers=headers, cookies=cookies)
                 response.raise_for_status()
                 soup = BeautifulSoup(response.content, 'html.parser')
                 
-                metadata = extract_metadata(soup, url.strip())
-                metadata_list.append(metadata)
+                gallery_id = url.strip().split("/")[-2]
+                title = soup.find("h1").get_text(strip=True)
+                channel = [a.get_text(strip=True) for a in soup.select(".rel-channel a")]
+                models = [a.get_text(strip=True) for a in soup.select(".rel-models a")]
+                categories = [a.get_text(strip=True) for a in soup.select(".rel-categories a")]
+                tags = [a.get_text(strip=True) for a in soup.select(".rel-tags a")]
+                views_tag = soup.find(string="Views:")
+                views = int(views_tag.find_next().get_text(strip=True).replace(",", "")) if views_tag else 0
+                count = len(soup.find_all("a", class_='rel-link'))
 
                 for img_tag in soup.find_all("a", class_='rel-link'):
-                    image_urls.append(img_tag.get("href"))
+                    img_url = img_tag.get("href")
+                    filename = img_url.split("/")[-1]
+                    image_urls.append(img_url)
+                    metadata.append({
+                        "gallery_id": gallery_id,
+                        "slug": title.lower().replace(" ", "-"),
+                        "title": title,
+                        "channel": channel,
+                        "models": models,
+                        "categories": categories,
+                        "tags": tags,
+                        "views": views,
+                        "count": count,
+                        "category": "pics",
+                        "subcategory": "gallery",
+                        "num": len(image_urls),
+                        "filename": os.path.splitext(filename)[0],
+                        "extension": os.path.splitext(filename)[1][1:]
+                    })
             except requests.RequestException as e:
                 print(f"Error fetching image URLs from {url.strip()}: {e}")
                 continue
@@ -98,40 +123,19 @@ def getting_image_urls_and_metadata(keyword, save_dir, write_metadata):
         with open(image_links_path, "w") as file:
             for img_url in image_urls:
                 file.write(f"{img_url}\n")
-
-        if write_metadata:
-            metadata_path = os.path.join(save_dir, f'{keyword}_metadata.json')
-            with open(metadata_path, "w") as file:
-                json.dump(metadata_list, file, indent=4)
                 
-        print("Got all image's URLs.")
+        metadata_path = os.path.join(save_dir, f'{keyword}_metadata.json')
+        with open(metadata_path, "w") as file:
+            json.dump(metadata, file, indent=4)
+                
+        print("Got all image's URLs and metadata.")
         print(f"Total images: {len(image_urls)}")
     except FileNotFoundError:
         print(f"File {keyword}_post_links.txt not found in {save_dir}. Please run the script to get post URLs first.")
         sys.exit(1)
 
-# Function to extract metadata from a BeautifulSoup object
-def extract_metadata(soup, url):
-    def extract_text(selector):
-        element = soup.select_one(selector)
-        return element.get_text(strip=True) if element else ""
-
-    def extract_list(selector):
-        return [e.get_text(strip=True) for e in soup.select(selector)]
-
-    metadata = {
-        "url": url,
-        "title": extract_text("h1"),
-        "channel": extract_text(".channel-name"),
-        "models": extract_list(".model-name"),
-        "categories": extract_list(".category-name"),
-        "tags": extract_list(".tag-name"),
-        "views": extract_text(".views-count").replace(",", ""),
-    }
-    return metadata
-
 # Function to download an image
-def download_image(url, save_dir):
+def download_image(url, save_dir, metadata, write_metadata):
     retries = 3
     for _ in range(retries):
         try:
@@ -140,6 +144,10 @@ def download_image(url, save_dir):
             filename = os.path.join(save_dir, url.split("/")[-1])
             with open(filename, 'wb') as file:
                 shutil.copyfileobj(response.raw, file)
+            if write_metadata:
+                metadata_filename = os.path.splitext(filename)[0] + ".json"
+                with open(metadata_filename, 'w') as metafile:
+                    json.dump(metadata, metafile, indent=4)
             return
         except requests.RequestException:
             time.sleep(1)
@@ -156,16 +164,21 @@ def main(keyword, save_dir, write_metadata):
         os.makedirs(save_dir)
 
     getting_post_urls(keyword, save_dir)
-    getting_image_urls_and_metadata(keyword, save_dir, write_metadata)
+    getting_image_urls(keyword, save_dir)
 
     image_links_path = os.path.join(save_dir, f'{keyword}_image_links.txt')
+    metadata_path = os.path.join(save_dir, f'{keyword}_metadata.json')
+
     with open(image_links_path, 'r') as file:
         image_urls = file.readlines()
+
+    with open(metadata_path, 'r') as file:
+        metadata_list = json.load(file)
 
     print(f"Downloading {len(image_urls)} images. Please wait.")
     
     with Pool(4) as pool:
-        list(tqdm(pool.imap_unordered(download_image_wrapper, [(url.strip(), save_dir) for url in image_urls]), total=len(image_urls), desc="Downloading images", unit="image"))
+        list(tqdm(pool.imap_unordered(download_image_wrapper, [(url.strip(), save_dir, metadata_list[idx], write_metadata) for idx, url in enumerate(image_urls)]), total=len(image_urls), desc="Downloading images", unit="image"))
 
     print("Done.")
 
@@ -173,7 +186,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Image downloader script.")
     parser.add_argument('--keyword', required=True, help="Keyword for searching images")
     parser.add_argument('--save_dir', default="./output", help="Directory to save images")
-    parser.add_argument('--write-metadata', action='store_true', help="Flag to write metadata to a JSON file")
+    parser.add_argument('--write-metadata', action='store_true', help="Write metadata for each image in JSON format")
     
     args = parser.parse_args()
     main(args.keyword, args.save_dir, args.write_metadata)
