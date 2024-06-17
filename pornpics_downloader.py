@@ -3,6 +3,7 @@ import os
 import requests
 import shutil
 import time
+import json
 from bs4 import BeautifulSoup
 from multiprocessing import Pool
 from tqdm import tqdm
@@ -51,8 +52,8 @@ def getting_post_urls(keyword, save_dir):
         print(f"Error fetching post URLs: {e}")
         sys.exit(1)
 
-# Function to get image URLs
-def getting_image_urls(keyword, save_dir):
+# Function to get image URLs and metadata
+def getting_image_urls_and_metadata(keyword, save_dir, write_metadata):
     try:
         post_links_path = os.path.join(save_dir, f'{keyword}_post_links.txt')
         with open(post_links_path, 'r') as file:
@@ -76,13 +77,17 @@ def getting_image_urls(keyword, save_dir):
         }
 
         image_urls = []
+        metadata_list = []
 
-        for url in tqdm(post_urls, desc="Fetching image URLs", unit="URL"):
+        for url in tqdm(post_urls, desc="Fetching image URLs and metadata", unit="URL"):
             try:
                 response = requests.get(url.strip(), headers=headers, cookies=cookies)
                 response.raise_for_status()
                 soup = BeautifulSoup(response.content, 'html.parser')
                 
+                metadata = extract_metadata(soup, url.strip())
+                metadata_list.append(metadata)
+
                 for img_tag in soup.find_all("a", class_='rel-link'):
                     image_urls.append(img_tag.get("href"))
             except requests.RequestException as e:
@@ -93,12 +98,37 @@ def getting_image_urls(keyword, save_dir):
         with open(image_links_path, "w") as file:
             for img_url in image_urls:
                 file.write(f"{img_url}\n")
+
+        if write_metadata:
+            metadata_path = os.path.join(save_dir, f'{keyword}_metadata.json')
+            with open(metadata_path, "w") as file:
+                json.dump(metadata_list, file, indent=4)
                 
         print("Got all image's URLs.")
         print(f"Total images: {len(image_urls)}")
     except FileNotFoundError:
         print(f"File {keyword}_post_links.txt not found in {save_dir}. Please run the script to get post URLs first.")
         sys.exit(1)
+
+# Function to extract metadata from a BeautifulSoup object
+def extract_metadata(soup, url):
+    def extract_text(selector):
+        element = soup.select_one(selector)
+        return element.get_text(strip=True) if element else ""
+
+    def extract_list(selector):
+        return [e.get_text(strip=True) for e in soup.select(selector)]
+
+    metadata = {
+        "url": url,
+        "title": extract_text("h1"),
+        "channel": extract_text(".channel-name"),
+        "models": extract_list(".model-name"),
+        "categories": extract_list(".category-name"),
+        "tags": extract_list(".tag-name"),
+        "views": extract_text(".views-count").replace(",", ""),
+    }
+    return metadata
 
 # Function to download an image
 def download_image(url, save_dir):
@@ -120,13 +150,13 @@ def download_image_wrapper(args):
     return download_image(*args)
 
 # Main function
-def main(keyword, save_dir):
+def main(keyword, save_dir, write_metadata):
     save_dir = os.path.join(save_dir, keyword)
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
     getting_post_urls(keyword, save_dir)
-    getting_image_urls(keyword, save_dir)
+    getting_image_urls_and_metadata(keyword, save_dir, write_metadata)
 
     image_links_path = os.path.join(save_dir, f'{keyword}_image_links.txt')
     with open(image_links_path, 'r') as file:
@@ -143,6 +173,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Image downloader script.")
     parser.add_argument('--keyword', required=True, help="Keyword for searching images")
     parser.add_argument('--save_dir', default="./output", help="Directory to save images")
+    parser.add_argument('--write-metadata', action='store_true', help="Flag to write metadata to a JSON file")
     
     args = parser.parse_args()
-    main(args.keyword, args.save_dir)
+    main(args.keyword, args.save_dir, args.write_metadata)
