@@ -17,7 +17,7 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 # Function to get post URLs
-def getting_post_urls(keyword):
+def getting_post_urls(keyword, save_dir):
     url = f'https://www.pornpics.com/search/srch.php?q={keyword}&limit=100000&offset='
     headers = {
         "Connection": "close",
@@ -41,7 +41,8 @@ def getting_post_urls(keyword):
         response.raise_for_status()
         json_data = response.json()
         
-        with open(f'{keyword}_post_links.txt', "w") as file:
+        post_links_path = os.path.join(save_dir, f'{keyword}_post_links.txt')
+        with open(post_links_path, "w") as file:
             for link in json_data:
                 file.write(f"{link['g_url']}\n")
                 
@@ -51,9 +52,10 @@ def getting_post_urls(keyword):
         sys.exit(1)
 
 # Function to get image URLs
-def getting_image_urls(keyword):
+def getting_image_urls(keyword, save_dir):
     try:
-        with open(f'{keyword}_post_links.txt', 'r') as file:
+        post_links_path = os.path.join(save_dir, f'{keyword}_post_links.txt')
+        with open(post_links_path, 'r') as file:
             post_urls = file.readlines()
 
         headers = {
@@ -87,14 +89,15 @@ def getting_image_urls(keyword):
                 print(f"Error fetching image URLs from {url.strip()}: {e}")
                 continue
 
-        with open(f'{keyword}_image_links.txt', "w") as file:
+        image_links_path = os.path.join(save_dir, f'{keyword}_image_links.txt')
+        with open(image_links_path, "w") as file:
             for img_url in image_urls:
                 file.write(f"{img_url}\n")
                 
         print("Got all image's URLs.")
         print(f"Total images: {len(image_urls)}")
     except FileNotFoundError:
-        print(f"File {keyword}_post_links.txt not found. Please run the script to get post URLs first.")
+        print(f"File {keyword}_post_links.txt not found in {save_dir}. Please run the script to get post URLs first.")
         sys.exit(1)
 
 # Function to download an image
@@ -118,13 +121,15 @@ def download_image_wrapper(args):
 
 # Main function
 def main(keyword, save_dir):
+    save_dir = os.path.join(save_dir, keyword)
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    getting_post_urls(keyword)
-    getting_image_urls(keyword)
+    getting_post_urls(keyword, save_dir)
+    getting_image_urls(keyword, save_dir)
 
-    with open(f'{keyword}_image_links.txt', 'r') as file:
+    image_links_path = os.path.join(save_dir, f'{keyword}_image_links.txt')
+    with open(image_links_path, 'r') as file:
         image_urls = file.readlines()
 
     print(f"Downloading {len(image_urls)} images. Please wait.")
