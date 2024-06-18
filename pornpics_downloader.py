@@ -87,8 +87,8 @@ def getting_image_urls(keyword, save_dir):
                 
                 gallery_id = url.strip().split("/")[-2]
                 title = soup.find("h1").get_text(strip=True)
-                channel = [a.get_text(strip=True) for a in soup.select(".rel-channel a")]
-                
+                channel = soup.select_one(".gallery-info__item:has(.gallery-info__title:contains('Channel:')) a").get_text(strip=True)
+
                 # Extract models
                 models = [a.get_text(strip=True) for a in soup.select('.gallery-info__item:has(.gallery-info__title:contains("Models:")) .gallery-info__content a')]
                 
@@ -97,9 +97,13 @@ def getting_image_urls(keyword, save_dir):
                 
                 # Extract tags
                 tags = [a.get_text(strip=True) for a in soup.select('.gallery-info__item.tags:has(.gallery-info__title:contains("Tags List:")) .gallery-info__content a')]
+
+                # Extract stats
+                stats = soup.select_one('.gallery-info__item:has(.gallery-info__title:contains("Stats:")) .gallery-info__content')
+                rating = stats.select_one('.info-rate .rate-count').get_text(strip=True)
+                views = stats.select_one('.info-views').get_text(strip=True).split(":")[1].strip().replace(",", "")
+                views = int(views) if views else 0
                 
-                views_tag = soup.find(string="Views:")
-                views = int(views_tag.find_next().get_text(strip=True).replace(",", "")) if views_tag else 0
                 count = len(soup.find_all("a", class_='rel-link'))
 
                 for img_tag in soup.find_all("a", class_='rel-link'):
@@ -111,6 +115,7 @@ def getting_image_urls(keyword, save_dir):
                         "slug": title.lower().replace(" ", "-"),
                         "title": title,
                         "channel": channel,
+                        "rating": rating,
                         "models": models,
                         "categories": categories,
                         "tags": tags,
