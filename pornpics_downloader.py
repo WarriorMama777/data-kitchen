@@ -88,9 +88,16 @@ def getting_image_urls(keyword, save_dir):
                 gallery_id = url.strip().split("/")[-2]
                 title = soup.find("h1").get_text(strip=True)
                 channel = [a.get_text(strip=True) for a in soup.select(".rel-channel a")]
-                models = [a.get_text(strip=True) for a in soup.select(".rel-models a")]
-                categories = [a.get_text(strip=True) for a in soup.select(".rel-categories a")]
-                tags = [a.get_text(strip=True) for a in soup.select(".rel-tags a")]
+                
+                # Extract models
+                models = [a.get_text(strip=True) for a in soup.select('.gallery-info__item:has(.gallery-info__title:contains("Models:")) .gallery-info__content a')]
+                
+                # Extract categories
+                categories = [a.get_text(strip=True) for a in soup.select('.gallery-info__item.tags:has(.gallery-info__title:contains("Categories:")) .gallery-info__content a')]
+                
+                # Extract tags
+                tags = [a.get_text(strip=True) for a in soup.select('.gallery-info__item.tags:has(.gallery-info__title:contains("Tags List:")) .gallery-info__content a')]
+                
                 views_tag = soup.find(string="Views:")
                 views = int(views_tag.find_next().get_text(strip=True).replace(",", "")) if views_tag else 0
                 count = len(soup.find_all("a", class_='rel-link'))
