@@ -84,26 +84,27 @@ def getting_image_urls(keyword, save_dir):
                 response = requests.get(url.strip(), headers=headers, cookies=cookies)
                 response.raise_for_status()
                 soup = BeautifulSoup(response.content, 'html.parser')
-                
+
                 gallery_id = url.strip().split("/")[-2]
-                title = soup.find("h1").get_text(strip=True)
-                channel = soup.select_one(".gallery-info__item:has(.gallery-info__title:contains('Channel:')) a").get_text(strip=True)
+                title = soup.find("h1").get_text(strip=True) if soup.find("h1") else None
+                channel = soup.select_one(".gallery-info__item:has(.gallery-info__title:contains('Channel:')) a")
+                channel = channel.get_text(strip=True) if channel else None
 
                 # Extract models
                 models = [a.get_text(strip=True) for a in soup.select('.gallery-info__item:has(.gallery-info__title:contains("Models:")) .gallery-info__content a')]
-                
+
                 # Extract categories
                 categories = [a.get_text(strip=True) for a in soup.select('.gallery-info__item.tags:has(.gallery-info__title:contains("Categories:")) .gallery-info__content a')]
-                
+
                 # Extract tags
                 tags = [a.get_text(strip=True) for a in soup.select('.gallery-info__item.tags:has(.gallery-info__title:contains("Tags List:")) .gallery-info__content a')]
 
                 # Extract stats
                 stats = soup.select_one('.gallery-info__item:has(.gallery-info__title:contains("Stats:")) .gallery-info__content')
-                rating = stats.select_one('.info-rate .rate-count').get_text(strip=True)
-                views = stats.select_one('.info-views').get_text(strip=True).split(":")[1].strip().replace(",", "")
+                rating = stats.select_one('.info-rate .rate-count').get_text(strip=True) if stats and stats.select_one('.info-rate .rate-count') else None
+                views = stats.select_one('.info-views').get_text(strip=True).split(":")[1].strip().replace(",", "") if stats and stats.select_one('.info-views') else "0"
                 views = int(views) if views else 0
-                
+
                 count = len(soup.find_all("a", class_='rel-link'))
 
                 for img_tag in soup.find_all("a", class_='rel-link'):
@@ -112,7 +113,7 @@ def getting_image_urls(keyword, save_dir):
                     image_urls.append(img_url)
                     metadata.append({
                         "gallery_id": gallery_id,
-                        "slug": title.lower().replace(" ", "-"),
+                        "slug": title.lower().replace(" ", "-") if title else None,
                         "title": title,
                         "channel": channel,
                         "rating": rating,
@@ -136,11 +137,11 @@ def getting_image_urls(keyword, save_dir):
         with open(image_links_path, "w") as file:
             for img_url in image_urls:
                 file.write(f"{img_url}\n")
-                
+
         metadata_path = os.path.join(save_dir, f'{keyword}_metadata.json')
         with open(metadata_path, "w") as file:
             json.dump(metadata, file, indent=4)
-                
+
         print("Got all image's URLs and metadata.")
         print(f"Total images: {len(image_urls)}")
     except FileNotFoundError:
