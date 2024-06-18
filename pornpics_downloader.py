@@ -125,7 +125,8 @@ def getting_image_urls(keyword, save_dir):
                         "subcategory": "gallery",
                         "num": len(image_urls),
                         "filename": os.path.splitext(filename)[0],
-                        "extension": os.path.splitext(filename)[1][1:]
+                        "extension": os.path.splitext(filename)[1][1:],
+                        "keyword": keyword  # 検索クエリキーワードも含めるようにする
                     })
             except requests.RequestException as e:
                 print(f"Error fetching image URLs from {url.strip()}: {e}")
@@ -170,7 +171,7 @@ def download_image_wrapper(args):
     return download_image(*args)
 
 # Main function
-def main(keyword, save_dir, write_metadata):
+def main(keyword, save_dir, write_metadata, limit_download):
     save_dir = os.path.join(save_dir, keyword)
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -187,6 +188,10 @@ def main(keyword, save_dir, write_metadata):
     with open(metadata_path, 'r') as file:
         metadata_list = json.load(file)
 
+    if limit_download > 0:
+        image_urls = image_urls[:limit_download]
+        metadata_list = metadata_list[:limit_download]
+
     print(f"Downloading {len(image_urls)} images. Please wait.")
     
     with Pool(4) as pool:
@@ -199,6 +204,8 @@ if __name__ == "__main__":
     parser.add_argument('--keyword', required=True, help="Keyword for searching images")
     parser.add_argument('--save_dir', default="./output", help="Directory to save images")
     parser.add_argument('--write-metadata', action='store_true', help="Write metadata for each image in JSON format")
-    
+    parser.add_argument('--limit_download', type=int, default=0, help="Limit the number of images to download")
+
     args = parser.parse_args()
-    main(args.keyword, args.save_dir, args.write_metadata)
+    main(args.keyword, args.save_dir, args.write_metadata, args.limit_download)
+
