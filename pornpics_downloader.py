@@ -18,7 +18,7 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 # Function to get post URLs
-def getting_post_urls(keyword, save_dir):
+def getting_post_urls(keyword, save_dir, limit_post_urls):
     url = f'https://www.pornpics.com/search/srch.php?q={keyword}&limit=100000&offset='
     headers = {
         "Connection": "close",
@@ -44,7 +44,9 @@ def getting_post_urls(keyword, save_dir):
         
         post_links_path = os.path.join(save_dir, f'{keyword}_post_links.txt')
         with open(post_links_path, "w") as file:
-            for link in json_data:
+            for i, link in enumerate(json_data):
+                if limit_post_urls and i >= limit_post_urls:
+                    break
                 file.write(f"{link['g_url']}\n")
                 
         print("Got all post's URLs.")
@@ -53,11 +55,14 @@ def getting_post_urls(keyword, save_dir):
         sys.exit(1)
 
 # Function to get image URLs
-def getting_image_urls(keyword, save_dir):
+def getting_image_urls(keyword, save_dir, limit_image_urls):
     try:
         post_links_path = os.path.join(save_dir, f'{keyword}_post_links.txt')
         with open(post_links_path, 'r') as file:
             post_urls = file.readlines()
+        
+        if limit_image_urls:
+            post_urls = post_urls[:limit_image_urls]
 
         headers = {
             "Connection": "close",
@@ -84,6 +89,11 @@ def getting_image_urls(keyword, save_dir):
                 response = requests.get(url.strip(), headers=headers, cookies=cookies)
                 response.raise_for_status()
                 soup = BeautifulSoup(response.content, 'html.parser')
+
+                # 除外する領域を削除
+                main2_div = soup.find(id="main2")
+                if main2_div:
+                    main2_div.decompose()
 
                 gallery_id = url.strip().split("/")[-2]
                 title = soup.find("h1").get_text(strip=True) if soup.find("h1") else None
@@ -172,13 +182,13 @@ def download_image_wrapper(args):
     return download_image(*args)
 
 # Main function
-def main(keyword, save_dir, write_metadata, limit_download):
+def main(keyword, save_dir, write_metadata, limit_download, limit_post_urls, limit_image_urls):
     save_dir = os.path.join(save_dir, keyword)
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    getting_post_urls(keyword, save_dir)
-    getting_image_urls(keyword, save_dir)
+    getting_post_urls(keyword, save_dir, limit_post_urls)
+    getting_image_urls(keyword, save_dir, limit_image_urls)
 
     image_links_path = os.path.join(save_dir, f'{keyword}_image_links.txt')
     metadata_path = os.path.join(save_dir, f'{keyword}_metadata.json')
@@ -206,7 +216,9 @@ if __name__ == "__main__":
     parser.add_argument('--save_dir', default="./output", help="Directory to save images")
     parser.add_argument('--write-metadata', action='store_true', help="Write metadata for each image in JSON format")
     parser.add_argument('--limit_download', type=int, default=0, help="Limit the number of images to download")
+    parser.add_argument('--limit_post_urls', type=int, default=0, help="Limit the number of post URLs to retrieve")
+    parser.add_argument('--limit_image_urls', type=int, default=0, help="Limit the number of image URLs to retrieve")
 
     args = parser.parse_args()
-    main(args.keyword, args.save_dir, args.write_metadata, args.limit_download)
-
+    main(args.keyword, args.save_dir, args.write_metadata, args.limit_download, args.limit_post_urls, args.limit_image_urls)
+    
