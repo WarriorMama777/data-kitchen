@@ -112,7 +112,8 @@ def getting_image_urls(keyword, save_dir, limit_image_urls):
                 # Extract stats
                 stats = soup.select_one('.gallery-info__item:has(.gallery-info__title:contains("Stats:")) .gallery-info__content')
                 rating = stats.select_one('.info-rate .rate-count').get_text(strip=True) if stats and stats.select_one('.info-rate .rate-count') else None
-                views = stats.select_one('.info-views').get_text(strip=True).split(":")[1].strip().replace(",", "") if stats and stats.select_one('.info-views') else "0"
+                views_text = stats.select_one('.info-views').get_text(strip=True) if stats and stats.select_one('.info-views') else "Views: 0"
+                views = views_text.split(":")[1].strip().replace(",", "") if ":" in views_text else "0"
                 views = int(views) if views else 0
 
                 count = len(soup.find_all("a", class_='rel-link'))
