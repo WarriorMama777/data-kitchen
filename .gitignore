@@ -1,6 +1,6 @@
 venv/
 venv2/
-example/
+# example/
 test/
 gallery-dl/
 **/__pycache__/
