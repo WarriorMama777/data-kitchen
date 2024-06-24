@@ -9,3 +9,4 @@ numba
 psutil
 imagehash
 huggingface_hub
+natsort

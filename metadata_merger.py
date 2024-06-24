@@ -3,6 +3,7 @@ import json
 import logging
 from pathlib import Path
 from tqdm import tqdm
+from natsort import natsorted  # ナチュラルソート用ライブラリのインポート
 
 # ロギングの設定
 logging.basicConfig(level=logging.INFO)
@@ -78,9 +79,12 @@ def main(args):
         if not text_file_found:
             logger.warning(f"No text file found for {image_path.name}")
 
+    # メタデータを自然順序でソート
+    sorted_metadata = {key: metadata[key] for key in natsorted(metadata)}
+
     # メタデータをJSONファイルに保存
     with open(dir_save_json_path, 'w', encoding='utf-8') as f:
-        json.dump(metadata, f, indent=2)
+        json.dump(sorted_metadata, f, indent=2)
 
     logger.info(f"Metadata saved to {dir_save_json_path}")
 
