@@ -41,7 +41,6 @@ def process_image(file_path, args, save_dir):
                     raise ValueError("Image does not have an alpha channel")
                 alpha = img.split()[-1]
                 
-                # アルファチャンネルが完全に不透明なら保存しない
                 if alpha.getextrema() == (255, 255):
                     return
                 
@@ -55,7 +54,13 @@ def process_image(file_path, args, save_dir):
             if args.resize:
                 img.thumbnail((args.resize, args.resize), Image.Resampling.LANCZOS)
             
-            save_path = os.path.join(save_dir, os.path.splitext(os.path.basename(file_path))[0] + '.' + (args.format or img.format.lower()))
+            # Preserve directory structure
+            relative_path = os.path.relpath(file_path, args.dir)
+            save_path = os.path.join(save_dir, relative_path)
+            save_path = os.path.splitext(save_path)[0] + '.' + (args.format or img.format.lower())
+
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
             save_kwargs = {}
             if args.format:
                 save_kwargs['format'] = args.format.upper()
@@ -80,7 +85,7 @@ def get_file_list(root_dir, extensions, recursive):
 def create_directory_structure(base_dir, target_dir, preserve_own_folder):
     if preserve_own_folder:
         target_dir = os.path.join(base_dir, os.path.basename(target_dir))
-    if not os.path.exists(target_dir):
+    elif not preserve_own_folder and not os.path.exists(target_dir):
         os.makedirs(target_dir)
     return target_dir
 
@@ -91,7 +96,6 @@ def main():
     if args.gc_disable:
         gc.disable()
 
-    # エラー処理の追加
     if args.save_only_alphachannel:
         if args.extension and any(ext.lower() not in ['png', 'webp'] for ext in args.extension):
             print("Error: --save_only_alphachannel is only supported for PNG and WebP formats.")
