@@ -54,13 +54,16 @@ def process_image(file_path, args, save_dir):
             if args.resize:
                 img.thumbnail((args.resize, args.resize), Image.Resampling.LANCZOS)
             
-            # Preserve directory structure
-            relative_path = os.path.relpath(file_path, args.dir)
-            save_path = os.path.join(save_dir, relative_path)
-            save_path = os.path.splitext(save_path)[0] + '.' + (args.format or img.format.lower())
-
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-
+            # 保存パスの生成
+            if args.preserve_structure:
+                relative_path = os.path.relpath(file_path, args.dir)
+                base, _ = os.path.splitext(relative_path)
+                save_path = os.path.join(save_dir, base + '.' + (args.format or img.format.lower()))
+                save_dir_structure = os.path.dirname(save_path)
+                os.makedirs(save_dir_structure, exist_ok=True)
+            else:
+                save_path = os.path.join(save_dir, os.path.splitext(os.path.basename(file_path))[0] + '.' + (args.format or img.format.lower()))
+            
             save_kwargs = {}
             if args.format:
                 save_kwargs['format'] = args.format.upper()
@@ -68,9 +71,16 @@ def process_image(file_path, args, save_dir):
                 save_kwargs['quality'] = args.quality
             if args.comp:
                 save_kwargs['compression'] = args.comp
+            
             img.save(save_path, **save_kwargs)
+            
+            if args.debug:
+                print(f"Processed: {file_path} -> {save_path}")
+                
     except Exception as e:
         print(f"Failed to process {file_path}: {e}")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error details: {str(e)}")
 
 def get_file_list(root_dir, extensions, recursive):
     file_list = []
@@ -82,11 +92,14 @@ def get_file_list(root_dir, extensions, recursive):
             break
     return file_list
 
-def create_directory_structure(base_dir, target_dir, preserve_own_folder):
+def create_directory_structure(base_dir, target_dir, preserve_own_folder, preserve_structure):
+    if preserve_structure:
+        return base_dir  # preserve_structureが指定された場合はbase_dirをそのまま使用
     if preserve_own_folder:
         target_dir = os.path.join(base_dir, os.path.basename(target_dir))
-    elif not preserve_own_folder and not os.path.exists(target_dir):
-        os.makedirs(target_dir)
+    else:
+        target_dir = base_dir  # preserve_own_folderおよびpreserve_structureが指定されていない場合もbase_dirを使用
+    os.makedirs(target_dir, exist_ok=True)
     return target_dir
 
 def main():
@@ -111,7 +124,9 @@ def main():
         for subdir in os.listdir(args.dir):
             dir_path = os.path.join(args.dir, subdir)
             if os.path.isdir(dir_path):
-                save_dir = create_directory_structure(args.save_dir, dir_path, args.preserve_own_folder)
+                save_dir = create_directory_structure(args.save_dir, dir_path, args.
+                preserve_own_folder, args.preserve_structure)
+                os.makedirs(save_dir, exist_ok=True)
                 file_list = get_file_list(dir_path, args.extension, args.recursive)
                 if args.debug:
                     print(f"Processing {len(file_list)} images in {dir_path}")
@@ -119,7 +134,8 @@ def main():
                 with concurrent.futures.ThreadPoolExecutor(max_workers=args.threads or (os.cpu_count() or 1)) as executor:
                     list(tqdm(executor.map(lambda file: process_image(file, args, save_dir), file_list), total=len(file_list)))
     else:
-        save_dir = create_directory_structure(args.save_dir, args.dir, args.preserve_own_folder)
+        save_dir = create_directory_structure(args.save_dir, args.dir, args.preserve_own_folder, args.preserve_structure)
+        os.makedirs(save_dir, exist_ok=True)
         file_list = get_file_list(args.dir, args.extension, args.recursive)
         if args.debug:
             print(f"Processing {len(file_list)} images in {args.dir}")
