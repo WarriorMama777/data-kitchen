@@ -82,15 +82,22 @@ def process_directory(directory_path, save_dir, metadata_order, save_extension='
     if by_folder:
         subdirs = [os.path.join(directory_path, d) for d in os.listdir(directory_path) if os.path.isdir(os.path.join(directory_path, d))]
         for subdir in subdirs:
-            process_directory(subdir, save_dir, metadata_order, save_extension, insert_custom_texts, debug, mem_cache, threads, recursive, preserve_own_folder, preserve_structure, by_folder=False)
+            subdir_save_dir = save_dir
+            if preserve_structure:
+                relative_path = os.path.relpath(subdir, directory_path)
+                subdir_save_dir = os.path.join(save_dir, relative_path)
+            process_directory(subdir, subdir_save_dir, metadata_order, save_extension, insert_custom_texts, debug, mem_cache, threads, recursive, False, preserve_structure, by_folder=False)
         return
 
     file_paths = []
     for root, dirs, files in os.walk(directory_path):
         if not recursive and root != directory_path:
             continue
-        relative_path = os.path.relpath(root, directory_path)
-        current_save_dir = os.path.join(save_dir, relative_path) if preserve_structure else save_dir
+        if preserve_structure:
+            relative_path = os.path.relpath(root, directory_path)
+            current_save_dir = os.path.join(save_dir, relative_path)
+        else:
+            current_save_dir = save_dir
         Path(current_save_dir).mkdir(parents=True, exist_ok=True)
 
         for file_name in files:
@@ -110,15 +117,15 @@ def process_directory(directory_path, save_dir, metadata_order, save_extension='
 
     for result in results:
         if result is not None and len(result) == 3:
-            save_dir, file_name, data = result
+            result_save_dir, file_name, data = result
             if mem_cache:
-                cache.append((save_dir, file_name, data))
+                cache.append((result_save_dir, file_name, data))
             else:
-                save_processed_data(save_dir, file_name, data)
+                save_processed_data(result_save_dir, file_name, data)
 
     if mem_cache:
-        for save_dir, file_name, data in cache:
-            save_processed_data(save_dir, file_name, data)
+        for result_save_dir, file_name, data in cache:
+            save_processed_data(result_save_dir, file_name, data)
         print("全データをメモリから一括で保存しました。")
 
 def main():
