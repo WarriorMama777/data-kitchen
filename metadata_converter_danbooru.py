@@ -8,6 +8,7 @@ from tqdm import tqdm
 import time
 from multiprocessing import Pool, cpu_count
 import gc
+import traceback
 
 def signal_handler(sig, frame):
     print('終了シグナルを受信しました。クリーンアップを行います。')
@@ -20,22 +21,33 @@ def process_file(file_path, current_save_dir, metadata_order, save_extension='tx
     if file_path.endswith('.txt') or file_path.endswith('.json'):
         if debug:
             print(f"[デバッグ] 処理するファイル: {file_path} -> 保存先: {current_save_dir}.{save_extension}")
-        else:
-            try:
-                with open(file_path, 'r', encoding='utf-8') as file:
-                    metadata = json.load(file)
-            except json.JSONDecodeError:
-                print(f"Warning: Skipping file due to JSONDecodeError: {file_path}")
-                return None, None
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                metadata = json.load(file)
+            
+            if debug:
+                print(f"[デバッグ] メタデータの型: {type(metadata)}")
+                print(f"[デバッグ] メタデータの内容: {metadata}")
+
+            if isinstance(metadata, list):
+                if debug:
+                    print("[デバッグ] メタデータはリストです。最初の要素を使用します。")
+                metadata = metadata[0] if metadata else {}
 
             extracted_data = []
             for key in metadata_order:
                 value = metadata.get(key, "")
                 if value:
-                    if key == 'rating':
-                        value = f'rating_{value}'
-                    else:
+                    if isinstance(value, list):
+                        value = ','.join(str(item) for item in value)
+                    elif isinstance(value, (dict, int, float)):
+                        value = str(value)
+                    elif isinstance(value, str):
                         value = value.replace(' ', ',')
+                    
+                    if key == 'rating' and not value.startswith('rating_'):
+                        value = f'rating_{value}'
+                
                 extracted_data.append(value)
 
             if insert_custom_texts:
@@ -45,10 +57,14 @@ def process_file(file_path, current_save_dir, metadata_order, save_extension='tx
 
             output_content = ','.join(filter(None, extracted_data))
             return (current_save_dir, os.path.splitext(os.path.basename(file_path))[0] + f'.{save_extension}', output_content)
+        except Exception as e:
+            print(f"Error processing file {file_path}: {str(e)}")
+            print(traceback.format_exc())
+            return None, None
     return None, None
 
 def save_processed_data(save_dir, file_name, data):
-    if data is not None:  # JSONDecodeErrorでスキップしたファイルを除外
+    if data is not None:
         output_file_path = os.path.join(save_dir, file_name)
         with open(output_file_path, 'w', encoding='utf-8') as output_file:
             output_file.write(data)
@@ -84,15 +100,21 @@ def process_directory(directory_path, save_dir, metadata_order, save_extension='
     if threads is None:
         threads = cpu_count()
 
-    with Pool(processes=threads) as pool:
-        results = pool.map(process_file_wrapper, file_paths)
+    try:
+        with Pool(processes=threads) as pool:
+            results = pool.map(process_file_wrapper, file_paths)
+    except Exception as e:
+        print(f"Error in multiprocessing: {str(e)}")
+        print(traceback.format_exc())
+        return
 
     for result in results:
-        if result[0] is not None and result[1] is not None:
+        if result is not None and len(result) == 3:
+            save_dir, file_name, data = result
             if mem_cache:
-                cache.append(result)
+                cache.append((save_dir, file_name, data))
             else:
-                save_processed_data(*result)
+                save_processed_data(save_dir, file_name, data)
 
     if mem_cache:
         for save_dir, file_name, data in cache:
