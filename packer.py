@@ -47,10 +47,20 @@ def compress_file(file_path, archive_path, archive_format):
             tarf.add(file_path, arcname=os.path.basename(file_path))
 
 def decompress_file(archive_path, output_dir, smart_unpack):
+    def get_extract_dir_name(archive_name):
+        # Remove all extensions (.tar.gz, .tar, .zip, etc.)
+        base_name = archive_name
+        while True:
+            new_base, ext = os.path.splitext(base_name)
+            if new_base == base_name:
+                break
+            base_name = new_base
+        return base_name
+
     if archive_path.endswith('.zip'):
         with zipfile.ZipFile(archive_path, 'r') as zipf:
             if smart_unpack and len(zipf.namelist()) > 1:
-                extract_dir = os.path.join(output_dir, os.path.splitext(os.path.basename(archive_path))[0])
+                extract_dir = os.path.join(output_dir, get_extract_dir_name(os.path.basename(archive_path)))
                 os.makedirs(extract_dir, exist_ok=True)
                 zipf.extractall(extract_dir)
             else:
@@ -58,11 +68,13 @@ def decompress_file(archive_path, output_dir, smart_unpack):
     elif archive_path.endswith(('.tar', '.tar.gz', '.tgz')):
         with tarfile.open(archive_path, 'r:*') as tarf:
             if smart_unpack and len(tarf.getnames()) > 1:
-                extract_dir = os.path.join(output_dir, os.path.splitext(os.path.basename(archive_path))[0])
+                extract_dir = os.path.join(output_dir, get_extract_dir_name(os.path.basename(archive_path)))
                 os.makedirs(extract_dir, exist_ok=True)
                 tarf.extractall(extract_dir)
             else:
                 tarf.extractall(output_dir)
+    
+    return f"Decompressed: {archive_path} -> {output_dir}"
 
 def process_item(item, args, output_dir):
     try:
