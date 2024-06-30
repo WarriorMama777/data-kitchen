@@ -20,6 +20,7 @@ def parse_arguments():
     parser.add_argument("--separate_size", type=str, help="Split size for compression (e.g., '1000MB')")
     parser.add_argument("--debug", action="store_true", help="Debug mode")
     parser.add_argument("--threads", type=int, default=0, help="Number of threads (0 for auto)")
+    
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--pack", action="store_true", help="Compress files")
     group.add_argument("--unpack", action="store_true", help="Decompress files")
@@ -35,20 +36,21 @@ def human_readable_size(size_bytes):
             return f"{size_bytes:.2f}{unit}"
         size_bytes /= 1024.0
 
-def compress_file(file_path, archive_path, archive_format):
+def compress_file(file_path, archive_path, archive_format, pbar):
     if archive_format == "zip":
         with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            zipf.write(file_path, os.path.basename(file_path))
-    elif archive_format == "tar":
-        with tarfile.open(archive_path, 'w') as tarf:
-            tarf.add(file_path, arcname=os.path.basename(file_path))
-    elif archive_format == "tar.gz":
-        with tarfile.open(archive_path, 'w:gz') as tarf:
-            tarf.add(file_path, arcname=os.path.basename(file_path))
+            arcname = os.path.basename(file_path)
+            zipf.write(file_path, arcname)
+            pbar.update(os.path.getsize(file_path))
+    elif archive_format in ["tar", "tar.gz"]:
+        mode = 'w:gz' if archive_format == "tar.gz" else 'w'
+        with tarfile.open(archive_path, mode) as tarf:
+            arcname = os.path.basename(file_path)
+            tarf.add(file_path, arcname)
+            pbar.update(os.path.getsize(file_path))
 
 def decompress_file(archive_path, output_dir, smart_unpack):
     def get_extract_dir_name(archive_name):
-        # Remove all extensions (.tar.gz, .tar, .zip, etc.)
         base_name = archive_name
         while True:
             new_base, ext = os.path.splitext(base_name)
@@ -76,28 +78,34 @@ def decompress_file(archive_path, output_dir, smart_unpack):
     
     return f"Decompressed: {archive_path} -> {output_dir}"
 
-def process_item(item, args, output_dir):
+def process_item(item, args, output_dir, pbar):
     try:
         if os.path.isfile(item):
-            if args.format == "zip":
-                output_file = os.path.join(output_dir, f"{os.path.basename(item)}.zip")
-                compress_file(item, output_file, "zip")
-            elif args.format == "tar":
-                output_file = os.path.join(output_dir, f"{os.path.basename(item)}.tar")
-                compress_file(item, output_file, "tar")
-            elif args.format == "tar.gz":
-                output_file = os.path.join(output_dir, f"{os.path.basename(item)}.tar.gz")
-                compress_file(item, output_file, "tar.gz")
+            output_file = os.path.join(output_dir, f"{os.path.basename(item)}.{args.format}")
+            compress_file(item, output_file, args.format, pbar)
         elif os.path.isdir(item):
+            output_file = os.path.join(output_dir, f"{os.path.basename(item)}.{args.format}")
+            total_size = sum(os.path.getsize(os.path.join(dirpath,filename)) 
+                             for dirpath, dirnames, filenames in os.walk(item) 
+                             for filename in filenames)
+            pbar.total = total_size
             if args.format == "zip":
-                output_file = os.path.join(output_dir, f"{os.path.basename(item)}.zip")
-                shutil.make_archive(output_file[:-4], 'zip', item)
-            elif args.format == "tar":
-                output_file = os.path.join(output_dir, f"{os.path.basename(item)}.tar")
-                shutil.make_archive(output_file[:-4], 'tar', item)
-            elif args.format == "tar.gz":
-                output_file = os.path.join(output_dir, f"{os.path.basename(item)}.tar.gz")
-                shutil.make_archive(output_file[:-7], 'gztar', item)
+                with zipfile.ZipFile(output_file, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for root, dirs, files in os.walk(item):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, item)
+                            zipf.write(file_path, arcname)
+                            pbar.update(os.path.getsize(file_path))
+            elif args.format in ["tar", "tar.gz"]:
+                mode = 'w:gz' if args.format == "tar.gz" else 'w'
+                with tarfile.open(output_file, mode) as tarf:
+                    for root, dirs, files in os.walk(item):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, item)
+                            tarf.add(file_path, arcname)
+                            pbar.update(os.path.getsize(file_path))
         return f"Processed: {item} -> {output_file}"
     except Exception as e:
         return f"Error processing {item}: {str(e)}"
@@ -131,15 +139,21 @@ def main():
             else:
                 items_to_process.append(path)
 
-    with ThreadPoolExecutor(max_workers=args.threads) as executor:
-        if args.pack:
-            futures = [executor.submit(process_item, item, args, output_dir) for item in items_to_process]
-        elif args.unpack:
-            futures = [executor.submit(decompress_file, item, output_dir, args.smart_unpack) for item in items_to_process]
-        
-        for future in tqdm(as_completed(futures), total=len(futures), desc="Processing", unit="item"):
-            result = future.result()
-            print(result)
+    total_size = sum(os.path.getsize(os.path.join(dirpath,filename)) 
+                     for item in items_to_process
+                     for dirpath, dirnames, filenames in os.walk(item) 
+                     for filename in filenames)
+
+    with tqdm(total=total_size, unit='B', unit_scale=True, desc="Processing") as pbar:
+        with ThreadPoolExecutor(max_workers=args.threads) as executor:
+            if args.pack:
+                futures = [executor.submit(process_item, item, args, output_dir, pbar) for item in items_to_process]
+            elif args.unpack:
+                futures = [executor.submit(decompress_file, item, output_dir, args.smart_unpack) for item in items_to_process]
+            
+            for future in as_completed(futures):
+                result = future.result()
+                print(result)
 
 def signal_handler(signum, frame):
     print("\nInterrupt received. Cleaning up and exiting...")
