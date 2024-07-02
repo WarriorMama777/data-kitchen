@@ -14,7 +14,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="File compression and decompression script")
     parser.add_argument("--dir", nargs="+", required=True, help="Target directory or file(s)")
     parser.add_argument("--dir_save", help="Output directory and filename")
-    parser.add_argument("--by_folder", action="store_true", help="Process each folder separately")
+    parser.add_argument("--by_folder", action="store_true", help="Process each folder separately when compressing")
+    parser.add_argument("--by_pack", action="store_true", help="Process each archive file separately when decompressing")
     parser.add_argument("--smart_unpack", action="store_true", default=True, help="Smart unpacking")
     parser.add_argument("--format", choices=["zip", "tar", "tar.gz"], default="zip", help="Compression format")
     parser.add_argument("--separate_size", type=str, help="Split size for compression (e.g., '1000MB')")
@@ -134,8 +135,10 @@ def main():
         if os.path.isfile(path):
             items_to_process.append(path)
         elif os.path.isdir(path):
-            if args.by_folder:
+            if args.pack and args.by_folder:
                 items_to_process.extend([os.path.join(path, item) for item in os.listdir(path) if os.path.isdir(os.path.join(path, item))])
+            elif args.unpack and args.by_pack:
+                items_to_process.extend([os.path.join(path, item) for item in os.listdir(path) if item.endswith(('.zip', '.tar', '.tar.gz', '.tgz'))])
             else:
                 items_to_process.append(path)
 
