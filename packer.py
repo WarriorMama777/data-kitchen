@@ -50,7 +50,7 @@ def compress_file(file_path, archive_path, archive_format, pbar):
             tarf.add(file_path, arcname)
             pbar.update(os.path.getsize(file_path))
 
-def decompress_file(archive_path, output_dir, smart_unpack):
+def decompress_file(archive_path, output_dir, smart_unpack, pbar):
     def get_extract_dir_name(archive_name):
         base_name = archive_name
         while True:
@@ -60,24 +60,39 @@ def decompress_file(archive_path, output_dir, smart_unpack):
             base_name = new_base
         return base_name
 
-    if archive_path.endswith('.zip'):
-        with zipfile.ZipFile(archive_path, 'r') as zipf:
-            if smart_unpack and len(zipf.namelist()) > 1:
-                extract_dir = os.path.join(output_dir, get_extract_dir_name(os.path.basename(archive_path)))
-                os.makedirs(extract_dir, exist_ok=True)
-                zipf.extractall(extract_dir)
-            else:
-                zipf.extractall(output_dir)
-    elif archive_path.endswith(('.tar', '.tar.gz', '.tgz')):
-        with tarfile.open(archive_path, 'r:*') as tarf:
-            if smart_unpack and len(tarf.getnames()) > 1:
-                extract_dir = os.path.join(output_dir, get_extract_dir_name(os.path.basename(archive_path)))
-                os.makedirs(extract_dir, exist_ok=True)
-                tarf.extractall(extract_dir)
-            else:
-                tarf.extractall(output_dir)
-    
-    return f"Decompressed: {archive_path} -> {output_dir}"
+    try:
+        archive_size = os.path.getsize(archive_path)
+        extracted_size = 0
+
+        if archive_path.endswith('.zip'):
+            with zipfile.ZipFile(archive_path, 'r') as zipf:
+                if smart_unpack and len(zipf.namelist()) > 1:
+                    extract_dir = os.path.join(output_dir, get_extract_dir_name(os.path.basename(archive_path)))
+                    os.makedirs(extract_dir, exist_ok=True)
+                else:
+                    extract_dir = output_dir
+
+                for file in zipf.namelist():
+                    zipf.extract(file, extract_dir)
+                    extracted_size += zipf.getinfo(file).file_size
+                    pbar.update(zipf.getinfo(file).compress_size)
+
+        elif archive_path.endswith(('.tar', '.tar.gz', '.tgz')):
+            with tarfile.open(archive_path, 'r:*') as tarf:
+                if smart_unpack and len(tarf.getnames()) > 1:
+                    extract_dir = os.path.join(output_dir, get_extract_dir_name(os.path.basename(archive_path)))
+                    os.makedirs(extract_dir, exist_ok=True)
+                else:
+                    extract_dir = output_dir
+
+                for member in tarf.getmembers():
+                    tarf.extract(member, extract_dir)
+                    extracted_size += member.size
+                    pbar.update(member.size)
+
+        return f"Decompressed: {archive_path} -> {extract_dir}"
+    except Exception as e:
+        return f"Error decompressing {archive_path}: {str(e)}"
 
 def process_item(item, args, output_dir, pbar):
     try:
@@ -142,17 +157,18 @@ def main():
             else:
                 items_to_process.append(path)
 
-    total_size = sum(os.path.getsize(os.path.join(dirpath,filename)) 
-                     for item in items_to_process
-                     for dirpath, dirnames, filenames in os.walk(item) 
-                     for filename in filenames)
+    total_size = sum(os.path.getsize(item) if os.path.isfile(item) else
+                     sum(os.path.getsize(os.path.join(dirpath, filename))
+                         for dirpath, dirnames, filenames in os.walk(item)
+                         for filename in filenames)
+                     for item in items_to_process)
 
     with tqdm(total=total_size, unit='B', unit_scale=True, desc="Processing") as pbar:
         with ThreadPoolExecutor(max_workers=args.threads) as executor:
             if args.pack:
                 futures = [executor.submit(process_item, item, args, output_dir, pbar) for item in items_to_process]
             elif args.unpack:
-                futures = [executor.submit(decompress_file, item, output_dir, args.smart_unpack) for item in items_to_process]
+                futures = [executor.submit(decompress_file, item, output_dir, args.smart_unpack, pbar) for item in items_to_process]
             
             for future in as_completed(futures):
                 result = future.result()
