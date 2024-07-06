@@ -94,6 +94,9 @@ def decompress_file(archive_path, output_dir, smart_unpack, pbar):
     except Exception as e:
         return f"Error decompressing {archive_path}: {str(e)}"
 
+def get_subdirectories(path):
+    return [os.path.join(path, d) for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
+
 def process_item(item, args, output_dir, pbar):
     try:
         if os.path.isfile(item):
@@ -101,10 +104,6 @@ def process_item(item, args, output_dir, pbar):
             compress_file(item, output_file, args.format, pbar)
         elif os.path.isdir(item):
             output_file = os.path.join(output_dir, f"{os.path.basename(item)}.{args.format}")
-            total_size = sum(os.path.getsize(os.path.join(dirpath,filename)) 
-                             for dirpath, dirnames, filenames in os.walk(item) 
-                             for filename in filenames)
-            pbar.total = total_size
             if args.format == "zip":
                 with zipfile.ZipFile(output_file, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     for root, dirs, files in os.walk(item):
@@ -145,23 +144,29 @@ def main():
     output_dir = args.dir_save if args.dir_save else os.path.dirname(args.dir[0])
     os.makedirs(output_dir, exist_ok=True)
 
+    print("Initializing... Please wait.")
+    
     items_to_process = []
     for path in args.dir:
         if os.path.isfile(path):
             items_to_process.append(path)
         elif os.path.isdir(path):
             if args.pack and args.by_folder:
-                items_to_process.extend([os.path.join(path, item) for item in os.listdir(path) if os.path.isdir(os.path.join(path, item))])
+                items_to_process.extend(get_subdirectories(path))
             elif args.unpack and args.by_pack:
                 items_to_process.extend([os.path.join(path, item) for item in os.listdir(path) if item.endswith(('.zip', '.tar', '.tar.gz', '.tgz'))])
             else:
                 items_to_process.append(path)
 
+    print(f"Found {len(items_to_process)} items to process.")
+
+    # Estimate total size without full directory traversal
     total_size = sum(os.path.getsize(item) if os.path.isfile(item) else
-                     sum(os.path.getsize(os.path.join(dirpath, filename))
-                         for dirpath, dirnames, filenames in os.walk(item)
-                         for filename in filenames)
+                     sum(os.path.getsize(os.path.join(item, f)) for f in os.listdir(item) if os.path.isfile(os.path.join(item, f)))
                      for item in items_to_process)
+
+    print(f"Estimated total size: {human_readable_size(total_size)}")
+    print("Starting processing...")
 
     with tqdm(total=total_size, unit='B', unit_scale=True, desc="Processing") as pbar:
         with ThreadPoolExecutor(max_workers=args.threads) as executor:
