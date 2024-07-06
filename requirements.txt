@@ -10,3 +10,4 @@ psutil
 imagehash
 huggingface_hub
 natsort
+aiofiles

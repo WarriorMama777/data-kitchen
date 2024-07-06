@@ -6,9 +6,12 @@ import tarfile
 import zipfile
 import signal
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import asyncio
+import aiofiles
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from tqdm import tqdm
 import psutil
+import io
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="File compression and decompression script")
@@ -21,6 +24,7 @@ def parse_arguments():
     parser.add_argument("--separate_size", type=str, help="Split size for compression (e.g., '1000MB')")
     parser.add_argument("--debug", action="store_true", help="Debug mode")
     parser.add_argument("--threads", type=int, default=0, help="Number of threads (0 for auto)")
+    parser.add_argument("--batch_size", type=int, default=1000, help="Number of files to process in a batch")
     
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--pack", action="store_true", help="Compress files")
@@ -37,20 +41,11 @@ def human_readable_size(size_bytes):
             return f"{size_bytes:.2f}{unit}"
         size_bytes /= 1024.0
 
-def compress_file(file_path, archive_path, archive_format, pbar):
-    if archive_format == "zip":
-        with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            arcname = os.path.basename(file_path)
-            zipf.write(file_path, arcname)
-            pbar.update(os.path.getsize(file_path))
-    elif archive_format in ["tar", "tar.gz"]:
-        mode = 'w:gz' if archive_format == "tar.gz" else 'w'
-        with tarfile.open(archive_path, mode) as tarf:
-            arcname = os.path.basename(file_path)
-            tarf.add(file_path, arcname)
-            pbar.update(os.path.getsize(file_path))
+async def write_file(path, content):
+    async with aiofiles.open(path, 'wb') as f:
+        await f.write(content)
 
-def decompress_file(archive_path, output_dir, smart_unpack, pbar):
+async def decompress_file(archive_path, output_dir, smart_unpack, pbar, batch_size=1000):
     def get_extract_dir_name(archive_name):
         base_name = archive_name
         while True:
@@ -68,27 +63,49 @@ def decompress_file(archive_path, output_dir, smart_unpack, pbar):
             with zipfile.ZipFile(archive_path, 'r') as zipf:
                 if smart_unpack and len(zipf.namelist()) > 1:
                     extract_dir = os.path.join(output_dir, get_extract_dir_name(os.path.basename(archive_path)))
-                    os.makedirs(extract_dir, exist_ok=True)
                 else:
                     extract_dir = output_dir
-
-                for file in zipf.namelist():
-                    zipf.extract(file, extract_dir)
-                    extracted_size += zipf.getinfo(file).file_size
-                    pbar.update(zipf.getinfo(file).compress_size)
+                
+                os.makedirs(extract_dir, exist_ok=True)
+                
+                write_tasks = []
+                for i in range(0, len(zipf.namelist()), batch_size):
+                    batch = zipf.namelist()[i:i+batch_size]
+                    for file in batch:
+                        content = zipf.read(file)
+                        file_path = os.path.join(extract_dir, file)
+                        write_tasks.append(write_file(file_path, content))
+                        extracted_size += len(content)
+                        pbar.update(len(content))
+                    
+                    await asyncio.gather(*write_tasks)
+                    write_tasks.clear()
 
         elif archive_path.endswith(('.tar', '.tar.gz', '.tgz')):
             with tarfile.open(archive_path, 'r:*') as tarf:
                 if smart_unpack and len(tarf.getnames()) > 1:
                     extract_dir = os.path.join(output_dir, get_extract_dir_name(os.path.basename(archive_path)))
-                    os.makedirs(extract_dir, exist_ok=True)
                 else:
                     extract_dir = output_dir
-
-                for member in tarf.getmembers():
-                    tarf.extract(member, extract_dir)
-                    extracted_size += member.size
-                    pbar.update(member.size)
+                
+                os.makedirs(extract_dir, exist_ok=True)
+                
+                write_tasks = []
+                members = tarf.getmembers()
+                for i in range(0, len(members), batch_size):
+                    batch = members[i:i+batch_size]
+                    for member in batch:
+                        if member.isfile():
+                            f = tarf.extractfile(member)
+                            if f is not None:
+                                content = f.read()
+                                file_path = os.path.join(extract_dir, member.name)
+                                write_tasks.append(write_file(file_path, content))
+                                extracted_size += len(content)
+                                pbar.update(len(content))
+                    
+                    await asyncio.gather(*write_tasks)
+                    write_tasks.clear()
 
         return f"Decompressed: {archive_path} -> {extract_dir}"
     except Exception as e:
@@ -125,7 +142,7 @@ def process_item(item, args, output_dir, pbar):
     except Exception as e:
         return f"Error processing {item}: {str(e)}"
 
-def main():
+async def main():
     args = parse_arguments()
 
     if args.debug:
@@ -169,14 +186,16 @@ def main():
     print("Starting processing...")
 
     with tqdm(total=total_size, unit='B', unit_scale=True, desc="Processing") as pbar:
-        with ThreadPoolExecutor(max_workers=args.threads) as executor:
-            if args.pack:
+        if args.pack:
+            with ThreadPoolExecutor(max_workers=args.threads) as executor:
                 futures = [executor.submit(process_item, item, args, output_dir, pbar) for item in items_to_process]
-            elif args.unpack:
-                futures = [executor.submit(decompress_file, item, output_dir, args.smart_unpack, pbar) for item in items_to_process]
-            
-            for future in as_completed(futures):
-                result = future.result()
+                for future in as_completed(futures):
+                    result = future.result()
+                    print(result)
+        elif args.unpack:
+            tasks = [decompress_file(item, output_dir, args.smart_unpack, pbar, args.batch_size) for item in items_to_process]
+            results = await asyncio.gather(*tasks)
+            for result in results:
                 print(result)
 
 def signal_handler(signum, frame):
@@ -185,4 +204,8 @@ def signal_handler(signum, frame):
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
-    main()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nInterrupt received. Cleaning up and exiting...")
+        sys.exit(0)
