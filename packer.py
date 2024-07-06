@@ -25,6 +25,7 @@ def parse_arguments():
     parser.add_argument("--debug", action="store_true", help="Debug mode")
     parser.add_argument("--threads", type=int, default=0, help="Number of threads (0 for auto)")
     parser.add_argument("--batch_size", type=int, default=1000, help="Number of files to process in a batch")
+    parser.add_argument("--mem_cache", type=str, choices=['ON', 'OFF'], default='ON', help="Use memory cache for decompression")
     
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--pack", action="store_true", help="Compress files")
@@ -45,7 +46,13 @@ async def write_file(path, content):
     async with aiofiles.open(path, 'wb') as f:
         await f.write(content)
 
-async def decompress_file(archive_path, output_dir, smart_unpack, pbar, batch_size=1000):
+async def write_cached_files(cached_files):
+    write_tasks = []
+    for file_path, content in cached_files.items():
+        write_tasks.append(write_file(file_path, content))
+    await asyncio.gather(*write_tasks)
+
+async def decompress_file(archive_path, output_dir, smart_unpack, pbar, batch_size=1000, use_mem_cache=True):
     def get_extract_dir_name(archive_name):
         base_name = archive_name
         while True:
@@ -58,6 +65,7 @@ async def decompress_file(archive_path, output_dir, smart_unpack, pbar, batch_si
     try:
         archive_size = os.path.getsize(archive_path)
         extracted_size = 0
+        cached_files = {}
 
         if archive_path.endswith('.zip'):
             with zipfile.ZipFile(archive_path, 'r') as zipf:
@@ -68,18 +76,24 @@ async def decompress_file(archive_path, output_dir, smart_unpack, pbar, batch_si
                 
                 os.makedirs(extract_dir, exist_ok=True)
                 
-                write_tasks = []
                 for i in range(0, len(zipf.namelist()), batch_size):
                     batch = zipf.namelist()[i:i+batch_size]
                     for file in batch:
                         content = zipf.read(file)
                         file_path = os.path.join(extract_dir, file)
-                        write_tasks.append(write_file(file_path, content))
+                        if use_mem_cache:
+                            cached_files[file_path] = content
+                        else:
+                            await write_file(file_path, content)
                         extracted_size += len(content)
                         pbar.update(len(content))
                     
-                    await asyncio.gather(*write_tasks)
-                    write_tasks.clear()
+                    if use_mem_cache and len(cached_files) >= batch_size:
+                        await write_cached_files(cached_files)
+                        cached_files.clear()
+                    
+                    if not use_mem_cache:
+                        await asyncio.sleep(0)  # Allow other tasks to run
 
         elif archive_path.endswith(('.tar', '.tar.gz', '.tgz')):
             with tarfile.open(archive_path, 'r:*') as tarf:
@@ -90,7 +104,6 @@ async def decompress_file(archive_path, output_dir, smart_unpack, pbar, batch_si
                 
                 os.makedirs(extract_dir, exist_ok=True)
                 
-                write_tasks = []
                 members = tarf.getmembers()
                 for i in range(0, len(members), batch_size):
                     batch = members[i:i+batch_size]
@@ -100,12 +113,23 @@ async def decompress_file(archive_path, output_dir, smart_unpack, pbar, batch_si
                             if f is not None:
                                 content = f.read()
                                 file_path = os.path.join(extract_dir, member.name)
-                                write_tasks.append(write_file(file_path, content))
+                                if use_mem_cache:
+                                    cached_files[file_path] = content
+                                else:
+                                    await write_file(file_path, content)
                                 extracted_size += len(content)
                                 pbar.update(len(content))
+                                f.close()  # Close the file after reading
                     
-                    await asyncio.gather(*write_tasks)
-                    write_tasks.clear()
+                    if use_mem_cache and len(cached_files) >= batch_size:
+                        await write_cached_files(cached_files)
+                        cached_files.clear()
+                    
+                    if not use_mem_cache:
+                        await asyncio.sleep(0)  # Allow other tasks to run
+
+        if use_mem_cache and cached_files:
+            await write_cached_files(cached_files)
 
         return f"Decompressed: {archive_path} -> {extract_dir}"
     except Exception as e:
@@ -185,6 +209,9 @@ async def main():
     print(f"Estimated total size: {human_readable_size(total_size)}")
     print("Starting processing...")
 
+    use_mem_cache = args.mem_cache == 'ON'
+    print(f"Memory cache: {'Enabled' if use_mem_cache else 'Disabled'}")
+
     with tqdm(total=total_size, unit='B', unit_scale=True, desc="Processing") as pbar:
         if args.pack:
             with ThreadPoolExecutor(max_workers=args.threads) as executor:
@@ -193,7 +220,7 @@ async def main():
                     result = future.result()
                     print(result)
         elif args.unpack:
-            tasks = [decompress_file(item, output_dir, args.smart_unpack, pbar, args.batch_size) for item in items_to_process]
+            tasks = [decompress_file(item, output_dir, args.smart_unpack, pbar, args.batch_size, use_mem_cache) for item in items_to_process]
             results = await asyncio.gather(*tasks)
             for result in results:
                 print(result)
