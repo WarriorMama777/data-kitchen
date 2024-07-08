@@ -29,7 +29,7 @@ def create_repository_if_not_exists(repo_id, repo_type, token, private):
         print(f"リポジトリ {repo_id} が存在しません。新しく作成します。")
         create_repo(repo_id=repo_id, repo_type=repo_type, token=token, private=private)
 
-def upload_file(file_path, repo_id, repo_type, token, revision, create_pr):
+def upload_file(file_path, repo_id, repo_type, token, revision, create_pr, preserve_structure, base_dir, preserve_own_folder):
     api = HfApi()
     max_retries = 3
     for attempt in range(max_retries):
@@ -39,9 +39,18 @@ def upload_file(file_path, repo_id, repo_type, token, revision, create_pr):
             with open(file_path, 'rb') as f:
                 content = f.read()
             buffer = io.BytesIO(content)
+            
+            if preserve_structure:
+                rel_path = os.path.relpath(file_path, base_dir)
+                if preserve_own_folder:
+                    base_folder_name = os.path.basename(base_dir)
+                    rel_path = os.path.join(base_folder_name, rel_path)
+            else:
+                rel_path = os.path.basename(file_path)
+            
             api.upload_file(
                 path_or_fileobj=buffer,
-                path_in_repo=os.path.basename(file_path),
+                path_in_repo=rel_path,
                 repo_id=repo_id,
                 repo_type=repo_type,
                 token=token,
@@ -57,27 +66,31 @@ def upload_file(file_path, repo_id, repo_type, token, revision, create_pr):
                 print(f"ファイルのアップロードに失敗しました: {file_path}")
                 return False
 
-def download_file(file_path, local_dir, repo_id, repo_type, token, revision):
+def download_file(file_path, local_dir, repo_id, repo_type, token, revision, preserve_structure, preserve_own_folder):
     api = HfApi()
     max_retries = 3
     for attempt in range(max_retries):
         if exit_event.is_set():
             return False
         try:
-            buffer = io.BytesIO()
+            if preserve_structure:
+                if preserve_own_folder:
+                    save_path = os.path.join(local_dir, repo_id.split('/')[-1], file_path)
+                else:
+                    save_path = os.path.join(local_dir, file_path)
+            else:
+                save_path = os.path.join(local_dir, os.path.basename(file_path))
+            
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            
             api.hf_hub_download(
                 repo_id=repo_id,
                 filename=file_path,
                 repo_type=repo_type,
                 token=token,
                 revision=revision,
-                local_dir=local_dir,
-                library_name="huggingface-util",
-                library_version="1.0",
-                user_agent="huggingface-util/1.0"
+                local_dir=os.path.dirname(save_path)
             )
-            with open(os.path.join(local_dir, file_path), 'wb') as f:
-                f.write(buffer.getvalue())
             return True
         except Exception as e:
             if attempt < max_retries - 1:
@@ -94,9 +107,9 @@ def worker(queue, args):
             if item is None:
                 break
             if args.upload:
-                upload_file(item, args.repo_id, args.repo_type, args.token, args.revision, args.create_pr)
+                upload_file(item, args.repo_id, args.repo_type, args.token, args.revision, args.create_pr, args.preserve_structure, args.dir[0], args.preserve_own_folder)
             elif args.download:
-                download_file(item, args.dir_save, args.repo_id, args.repo_type, args.token, args.revision)
+                download_file(item, args.dir_save, args.repo_id, args.repo_type, args.token, args.revision, args.preserve_structure, args.preserve_own_folder)
             queue.task_done()
         except queue.Empty:
             continue
@@ -123,7 +136,10 @@ def main():
     parser.add_argument("--token", required=True, help="Hugging Face user access token")
     parser.add_argument("--quiet", action="store_true", help="Quiet mode")
     parser.add_argument("--threads", type=int, default=multiprocessing.cpu_count(), help="Number of threads to use")
-
+    parser.add_argument("--recursive", action="store_true", default=True, help="Process subdirectories recursively")
+    parser.add_argument("--preserve_structure", action="store_true", default=True, help="Preserve directory structure")
+    parser.add_argument("--preserve_own_folder", action="store_true", help="Preserve own folder name")
+    
     args = parser.parse_args()
 
     if args.upload and args.download:
@@ -150,13 +166,23 @@ def main():
             if os.path.isfile(path):
                 files_to_process.append(path)
             elif os.path.isdir(path):
-                for root, _, files in os.walk(path):
-                    for file in files:
-                        if args.extension:
-                            if any(file.endswith(ext) for ext in args.extension):
+                if args.recursive:
+                    for root, _, files in os.walk(path):
+                        for file in files:
+                            if args.extension:
+                                if any(file.endswith(ext) for ext in args.extension):
+                                    files_to_process.append(os.path.join(root, file))
+                            else:
                                 files_to_process.append(os.path.join(root, file))
-                        else:
-                            files_to_process.append(os.path.join(root, file))
+                else:
+                    for file in os.listdir(path):
+                        file_path = os.path.join(path, file)
+                        if os.path.isfile(file_path):
+                            if args.extension:
+                                if any(file.endswith(ext) for ext in args.extension):
+                                    files_to_process.append(file_path)
+                            else:
+                                files_to_process.append(file_path)
     elif args.download:
         api = HfApi()
         files_info = api.list_repo_files(args.repo_id, repo_type=args.repo_type, revision=args.revision)
