@@ -4,12 +4,13 @@ import argparse
 import signal
 import time
 from tqdm import tqdm
-from huggingface_hub import HfApi, Repository, create_repo
+from huggingface_hub import HfApi, Repository, create_repo, hf_hub_download
 import multiprocessing
 import threading
 import queue
 import io
 import sys
+import shutil
 
 # グローバル変数for safe exit
 exit_event = threading.Event()
@@ -66,68 +67,29 @@ def upload_file(file_path, repo_id, repo_type, token, revision, create_pr, prese
                 print(f"ファイルのアップロードに失敗しました: {file_path}")
                 return False
 
-def is_system_file(path):
-    """システムファイルかどうかを判定する"""
-    try:
-        # Windowsの場合
-        if os.name == 'nt':
-            import win32file
-            attributes = win32file.GetFileAttributes(path)
-            return attributes & win32file.FILE_ATTRIBUTE_SYSTEM != 0
-        # Unix系の場合
-        else:
-            return os.path.islink(path) or not os.access(path, os.W_OK)
-    except:
-        # 判定できない場合は安全のためTrueを返す
-        return True
-
-def safe_remove(path):
-    """安全にファイルを削除する"""
-    try:
-        if not os.path.exists(path):
-            return
-        if is_system_file(path):
-            print(f"警告: システムファイルのため削除をスキップします: {path}")
-            return
-        if os.path.isfile(path):
-            os.chmod(path, stat.S_IWRITE)
-            os.unlink(path)
-        elif os.path.isdir(path):
-            # ディレクトリ内のファイルを再帰的に処理
-            for root, dirs, files in os.walk(path, topdown=False):
-                for name in files:
-                    safe_remove(os.path.join(root, name))
-                for name in dirs:
-                    safe_remove(os.path.join(root, name))
-            os.rmdir(path)
-    except Exception as e:
-        print(f"警告: ファイルの削除中にエラーが発生しました: {path}")
-        print(f"エラー詳細: {str(e)}")
-
 def cleanup_download(directory):
     """ダウンロードしたファイルをクリーンアップする"""
     try:
         # .huggingfaceディレクトリを削除
         hf_dir = os.path.join(directory, '.huggingface')
         if os.path.exists(hf_dir):
-            safe_remove(hf_dir)
+            shutil.rmtree(hf_dir)
         
         # .gitattributesファイルを削除
         git_attr = os.path.join(directory, '.gitattributes')
         if os.path.exists(git_attr):
-            safe_remove(git_attr)
+            os.remove(git_attr)
         
         # メタデータファイルを削除
         for root, dirs, files in os.walk(directory):
             for file in files:
                 if file.endswith('.metadata'):
-                    safe_remove(os.path.join(root, file))
+                    os.remove(os.path.join(root, file))
     except Exception as e:
         print(f"警告: クリーンアップ中にエラーが発生しました: {directory}")
         print(f"エラー詳細: {str(e)}")
 
 def download_file(file_path, local_dir, repo_id, repo_type, token, revision, preserve_structure, preserve_own_folder):
-    api = HfApi()
     max_retries = 3
     for attempt in range(max_retries):
         if exit_event.is_set():
@@ -159,23 +121,6 @@ def download_file(file_path, local_dir, repo_id, repo_type, token, revision, pre
                 print(f"ファイルのダウンロードに失敗しました: {file_path}")
                 return False
 
-def cleanup_download(directory):
-    # .huggingfaceディレクトリを削除
-    hf_dir = os.path.join(directory, '.huggingface')
-    if os.path.exists(hf_dir):
-        shutil.rmtree(hf_dir)
-    
-    # .gitattributesファイルを削除
-    git_attr = os.path.join(directory, '.gitattributes')
-    if os.path.exists(git_attr):
-        os.remove(git_attr)
-    
-    # メタデータファイルを削除
-    for root, dirs, files in os.walk(directory):
-        for file in files:
-            if file.endswith('.metadata'):
-                os.remove(os.path.join(root, file))
-
 def worker(queue, args):
     while not exit_event.is_set():
         try:
@@ -185,9 +130,11 @@ def worker(queue, args):
             if args.upload:
                 success = upload_file(item, args.repo_id, args.repo_type, args.token, args.revision, args.create_pr, args.preserve_structure, args.dir[0], args.preserve_own_folder)
                 if not success:
-                    time.sleep(10)  # レート制限にかかった場合は1分待機
+                    time.sleep(10)  # レート制限にかかった場合は10秒待機
             elif args.download:
-                download_file(item, args.dir_save, args.repo_id, args.repo_type, args.token, args.revision, args.preserve_structure, args.preserve_own_folder)
+                success = download_file(item, args.dir_save, args.repo_id, args.repo_type, args.token, args.revision, args.preserve_structure, args.preserve_own_folder)
+                if not success:
+                    time.sleep(10)  # レート制限にかかった場合は10秒待機
             queue.task_done()
         except queue.Empty:
             continue
@@ -217,6 +164,7 @@ def main():
     parser.add_argument("--recursive", action="store_true", default=True, help="Process subdirectories recursively")
     parser.add_argument("--preserve_structure", action="store_true", default=True, help="Preserve directory structure")
     parser.add_argument("--preserve_own_folder", action="store_true", help="Preserve own folder name")
+    parser.add_argument("--by_file", action="store_true", help="Upload files one by one")
     
     args = parser.parse_args()
 
@@ -276,24 +224,37 @@ def main():
         print(f"処理対象ファイル: {files_to_process}")
         return
 
-    q = queue.Queue()
-    threads = []
-    for _ in range(min(args.threads, len(files_to_process))):
-        t = threading.Thread(target=worker, args=(q, args))
-        t.start()
-        threads.append(t)
+    if args.by_file:
+        with tqdm(total=len(files_to_process), unit="file", disable=args.quiet) as pbar:
+            for file in files_to_process:
+                if exit_event.is_set():
+                    break
+                if args.upload:
+                    success = upload_file(file, args.repo_id, args.repo_type, args.token, args.revision, args.create_pr, args.preserve_structure, args.dir[0], args.preserve_own_folder)
+                elif args.download:
+                    success = download_file(file, args.dir_save, args.repo_id, args.repo_type, args.token, args.revision, args.preserve_structure, args.preserve_own_folder)
+                if not success:
+                    time.sleep(60)  # レート制限にかかった場合は1分待機
+                pbar.update(1)
+    else:
+        q = queue.Queue()
+        threads = []
+        for _ in range(min(args.threads, len(files_to_process))):
+            t = threading.Thread(target=worker, args=(q, args))
+            t.start()
+            threads.append(t)
 
-    with tqdm(total=len(files_to_process), unit="file", disable=args.quiet) as pbar:
-        for file in files_to_process:
-            q.put(file)
-            pbar.update(1)
+        with tqdm(total=len(files_to_process), unit="file", disable=args.quiet) as pbar:
+            for file in files_to_process:
+                q.put(file)
+                pbar.update(1)
 
-    q.join()
+        q.join()
 
-    for _ in range(args.threads):
-        q.put(None)
-    for t in threads:
-        t.join()
+        for _ in range(args.threads):
+            q.put(None)
+        for t in threads:
+            t.join()
 
     if exit_event.is_set():
         print("スクリプトは安全に停止されました。")
