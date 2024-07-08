@@ -66,6 +66,66 @@ def upload_file(file_path, repo_id, repo_type, token, revision, create_pr, prese
                 print(f"ファイルのアップロードに失敗しました: {file_path}")
                 return False
 
+def is_system_file(path):
+    """システムファイルかどうかを判定する"""
+    try:
+        # Windowsの場合
+        if os.name == 'nt':
+            import win32file
+            attributes = win32file.GetFileAttributes(path)
+            return attributes & win32file.FILE_ATTRIBUTE_SYSTEM != 0
+        # Unix系の場合
+        else:
+            return os.path.islink(path) or not os.access(path, os.W_OK)
+    except:
+        # 判定できない場合は安全のためTrueを返す
+        return True
+
+def safe_remove(path):
+    """安全にファイルを削除する"""
+    try:
+        if not os.path.exists(path):
+            return
+        if is_system_file(path):
+            print(f"警告: システムファイルのため削除をスキップします: {path}")
+            return
+        if os.path.isfile(path):
+            os.chmod(path, stat.S_IWRITE)
+            os.unlink(path)
+        elif os.path.isdir(path):
+            # ディレクトリ内のファイルを再帰的に処理
+            for root, dirs, files in os.walk(path, topdown=False):
+                for name in files:
+                    safe_remove(os.path.join(root, name))
+                for name in dirs:
+                    safe_remove(os.path.join(root, name))
+            os.rmdir(path)
+    except Exception as e:
+        print(f"警告: ファイルの削除中にエラーが発生しました: {path}")
+        print(f"エラー詳細: {str(e)}")
+
+def cleanup_download(directory):
+    """ダウンロードしたファイルをクリーンアップする"""
+    try:
+        # .huggingfaceディレクトリを削除
+        hf_dir = os.path.join(directory, '.huggingface')
+        if os.path.exists(hf_dir):
+            safe_remove(hf_dir)
+        
+        # .gitattributesファイルを削除
+        git_attr = os.path.join(directory, '.gitattributes')
+        if os.path.exists(git_attr):
+            safe_remove(git_attr)
+        
+        # メタデータファイルを削除
+        for root, dirs, files in os.walk(directory):
+            for file in files:
+                if file.endswith('.metadata'):
+                    safe_remove(os.path.join(root, file))
+    except Exception as e:
+        print(f"警告: クリーンアップ中にエラーが発生しました: {directory}")
+        print(f"エラー詳細: {str(e)}")
+
 def download_file(file_path, local_dir, repo_id, repo_type, token, revision, preserve_structure, preserve_own_folder):
     api = HfApi()
     max_retries = 3
@@ -83,14 +143,13 @@ def download_file(file_path, local_dir, repo_id, repo_type, token, revision, pre
             
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             
-            api.hf_hub_download(
-                repo_id=repo_id,
-                filename=file_path,
-                repo_type=repo_type,
-                token=token,
-                revision=revision,
-                local_dir=os.path.dirname(save_path)
-            )
+            # hf_hub_downloadを使用してファイルをダウンロード
+            hf_hub_download(repo_id=repo_id, filename=file_path, local_dir=os.path.dirname(save_path), 
+                            repo_type=repo_type, revision=revision, token=token, force_download=True)
+            
+            # ダウンロードしたファイルをクリーンアップ
+            cleanup_download(os.path.dirname(save_path))
+            
             return True
         except Exception as e:
             if attempt < max_retries - 1:
@@ -100,6 +159,23 @@ def download_file(file_path, local_dir, repo_id, repo_type, token, revision, pre
                 print(f"ファイルのダウンロードに失敗しました: {file_path}")
                 return False
 
+def cleanup_download(directory):
+    # .huggingfaceディレクトリを削除
+    hf_dir = os.path.join(directory, '.huggingface')
+    if os.path.exists(hf_dir):
+        shutil.rmtree(hf_dir)
+    
+    # .gitattributesファイルを削除
+    git_attr = os.path.join(directory, '.gitattributes')
+    if os.path.exists(git_attr):
+        os.remove(git_attr)
+    
+    # メタデータファイルを削除
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file.endswith('.metadata'):
+                os.remove(os.path.join(root, file))
+
 def worker(queue, args):
     while not exit_event.is_set():
         try:
@@ -107,7 +183,9 @@ def worker(queue, args):
             if item is None:
                 break
             if args.upload:
-                upload_file(item, args.repo_id, args.repo_type, args.token, args.revision, args.create_pr, args.preserve_structure, args.dir[0], args.preserve_own_folder)
+                success = upload_file(item, args.repo_id, args.repo_type, args.token, args.revision, args.create_pr, args.preserve_structure, args.dir[0], args.preserve_own_folder)
+                if not success:
+                    time.sleep(10)  # レート制限にかかった場合は1分待機
             elif args.download:
                 download_file(item, args.dir_save, args.repo_id, args.repo_type, args.token, args.revision, args.preserve_structure, args.preserve_own_folder)
             queue.task_done()
