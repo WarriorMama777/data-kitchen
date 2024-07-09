@@ -16,7 +16,6 @@ def parse_arguments():
     parser.add_argument("--dir_save", help="Output directory and filename")
     parser.add_argument("--by_folder", action="store_true", help="Process each folder separately when compressing")
     parser.add_argument("--by_pack", action="store_true", help="Process each archive file separately when decompressing")
-    parser.add_argument("--smart_unpack", action="store_true", default=True, help="Smart unpacking")
     parser.add_argument("--format", choices=["zip", "tar", "tar.gz"], default="zip", help="Compression format")
     parser.add_argument("--separate_size", type=str, help="Split size for compression (e.g., '1000MB')")
     parser.add_argument("--debug", action="store_true", help="Debug mode")
@@ -50,61 +49,43 @@ def compress_file(file_path, archive_path, archive_format, pbar):
             tarf.add(file_path, arcname)
             pbar.update(os.path.getsize(file_path))
 
-def decompress_file(archive_path, output_dir, smart_unpack, pbar):
-    def get_extract_dir_name(archive_name):
-        base_name = archive_name
-        while True:
-            new_base, ext = os.path.splitext(base_name)
-            if new_base == base_name:
-                break
-            base_name = new_base
-        return base_name
-
+def decompress_file(archive_path, output_dir, pbar):
     try:
-        print(f"Attempting to decompress: {archive_path}")  # デバッグ情報
+        print(f"Attempting to decompress: {archive_path}")
         
         if os.path.isdir(archive_path):
             print(f"Processing directory: {archive_path}")
             split_files = [f for f in os.listdir(archive_path) if f.endswith('.001')]
             if split_files:
                 first_part = os.path.join(archive_path, split_files[0])
-                return decompress_file(first_part, output_dir, smart_unpack, pbar)
+                return decompress_file(first_part, output_dir, pbar)
             else:
                 print(f"No split archive files found in {archive_path}")
                 return f"Skipped: {archive_path} (no split archives found)"
 
         archive_size = os.path.getsize(archive_path)
         extracted_size = 0
-        extract_dir = output_dir  # デフォルトの抽出ディレクトリを設定
 
         if archive_path.endswith('.zip'):
-            print("Processing ZIP file")  # デバッグ情報
+            print("Processing ZIP file")
             with zipfile.ZipFile(archive_path, 'r') as zipf:
-                if smart_unpack and len(zipf.namelist()) > 1:
-                    extract_dir = os.path.join(output_dir, get_extract_dir_name(os.path.basename(archive_path)))
-                    os.makedirs(extract_dir, exist_ok=True)
-
                 for file in zipf.namelist():
-                    zipf.extract(file, extract_dir)
+                    zipf.extract(file, output_dir)
                     extracted_size += zipf.getinfo(file).file_size
                     pbar.update(zipf.getinfo(file).compress_size)
 
         elif archive_path.endswith(('.tar', '.tar.gz', '.tgz')) or is_split_archive(archive_path):
-            print("Processing TAR or split archive")  # デバッグ情報
+            print("Processing TAR or split archive")
             if is_split_archive(archive_path):
-                print("Detected split archive")  # デバッグ情報
+                print("Detected split archive")
                 combined_archive = combine_split_archives(archive_path)
                 tarfile_path = combined_archive
             else:
                 tarfile_path = archive_path
 
             with tarfile.open(tarfile_path, 'r:*') as tarf:
-                if smart_unpack and len(tarf.getnames()) > 1:
-                    extract_dir = os.path.join(output_dir, get_extract_dir_name(os.path.basename(archive_path)))
-                    os.makedirs(extract_dir, exist_ok=True)
-
                 for member in tarf.getmembers():
-                    tarf.extract(member, extract_dir)
+                    tarf.extract(member, output_dir)
                     extracted_size += member.size
                     pbar.update(member.size)
 
@@ -115,12 +96,12 @@ def decompress_file(archive_path, output_dir, smart_unpack, pbar):
             print(f"Warning: Unsupported file format for {archive_path}")
             return f"Skipped: {archive_path} (unsupported format)"
 
-        print(f"Successfully decompressed: {archive_path} -> {extract_dir}")  # デバッグ情報
-        return f"Decompressed: {archive_path} -> {extract_dir}"
+        print(f"Successfully decompressed: {archive_path} -> {output_dir}")
+        return f"Decompressed: {archive_path} -> {output_dir}"
     except Exception as e:
-        print(f"Error in decompress_file: {str(e)}")  # デバッグ情報
+        print(f"Error in decompress_file: {str(e)}")
         import traceback
-        traceback.print_exc()  # スタックトレースを出力
+        traceback.print_exc()
         return f"Error decompressing {archive_path}: {str(e)}"
 
 def is_split_archive(file_path):
@@ -143,12 +124,12 @@ def combine_split_archives(first_part_path):
             part_path = f"{base_path}.{part_num:03d}"
             if not os.path.exists(part_path):
                 break
-            print(f"Combining part: {part_path}")  # デバッグ情報
+            print(f"Combining part: {part_path}")
             with open(part_path, 'rb') as part_file:
                 shutil.copyfileobj(part_file, combined_file)
             part_num += 1
     
-    print(f"Combined archive created: {combined_path}")  # デバッグ情報
+    print(f"Combined archive created: {combined_path}")
     return combined_path
 
 def get_subdirectories(path):
@@ -214,14 +195,13 @@ def main():
                 if args.by_pack:
                     items_to_process.extend([os.path.join(path, item) for item in os.listdir(path) if item.endswith(('.zip', '.tar', '.tar.gz', '.tgz', '.001'))])
                 else:
-                    items_to_process.append(path)  # ディレクトリ全体を処理
+                    items_to_process.append(path)
             else:
                 items_to_process.append(path)
 
     print(f"Found {len(items_to_process)} items to process.")
-    print(f"Items to process: {items_to_process}")  # デバッグ情報
+    print(f"Items to process: {items_to_process}")
 
-    # Estimate total size without full directory traversal
     total_size = sum(os.path.getsize(item) if os.path.isfile(item) else
                      sum(os.path.getsize(os.path.join(item, f)) for f in os.listdir(item) if os.path.isfile(os.path.join(item, f)))
                      for item in items_to_process)
@@ -234,7 +214,7 @@ def main():
             if args.pack:
                 futures = [executor.submit(process_item, item, args, output_dir, pbar) for item in items_to_process]
             elif args.unpack:
-                futures = [executor.submit(decompress_file, item, output_dir, args.smart_unpack, pbar) for item in items_to_process]
+                futures = [executor.submit(decompress_file, item, output_dir, pbar) for item in items_to_process]
             
             for future in as_completed(futures):
                 result = future.result()
