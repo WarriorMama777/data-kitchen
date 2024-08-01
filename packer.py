@@ -11,8 +11,8 @@ from tqdm import tqdm
 import psutil
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="File compression and decompression script")
-    parser.add_argument("--dir", nargs="+", required=True, help="Target directory or file(s)")
+    parser = argparse.ArgumentParser(description="File compression, decompression, and merging script")
+    parser.add_argument("--dir", nargs="+", help="Target directory or file(s)")
     parser.add_argument("--dir_save", help="Output directory and filename")
     parser.add_argument("--by_folder", action="store_true", help="Process each folder separately when compressing")
     parser.add_argument("--by_pack", action="store_true", help="Process each archive file separately when decompressing")
@@ -24,8 +24,20 @@ def parse_arguments():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--pack", action="store_true", help="Compress files")
     group.add_argument("--unpack", action="store_true", help="Decompress files")
+    group.add_argument("--merge", type=str, help="Merge split archive files (specify the .001 file)")
     
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if args.merge and not args.dir_save:
+        parser.error("--dir_save must be specified when using --merge")
+
+    if args.pack or args.unpack:
+        if not args.dir:
+            parser.error("--dir must be specified when using --pack or --unpack")
+        if not args.dir_save and len(args.dir) > 1:
+            parser.error("--dir_save must be specified when multiple directories are provided")
+
+    return args
 
 def get_optimal_thread_count():
     return max(psutil.cpu_count(logical=False), 1)
@@ -163,6 +175,36 @@ def process_item(item, args, output_dir, pbar):
     except Exception as e:
         return f"Error processing {item}: {str(e)}"
 
+def merge_split_archives(first_part_path, output_dir):
+    if not first_part_path.endswith('.001'):
+        raise ValueError("The specified file must end with '.001'")
+
+    base_path = first_part_path[:-4]
+    base_name = os.path.basename(base_path)
+    combined_path = os.path.join(output_dir, f"{base_name}_merged.tar")
+
+    total_size = 0
+    part_files = []
+    part_num = 1
+
+    while True:
+        part_path = f"{base_path}.{part_num:03d}"
+        if not os.path.exists(part_path):
+            break
+        part_files.append(part_path)
+        total_size += os.path.getsize(part_path)
+        part_num += 1
+
+    with tqdm(total=total_size, unit='B', unit_scale=True, desc="Merging") as pbar:
+        with open(combined_path, 'wb') as combined_file:
+            for part_path in part_files:
+                with open(part_path, 'rb') as part_file:
+                    shutil.copyfileobj(part_file, combined_file)
+                pbar.update(os.path.getsize(part_path))
+
+    print(f"Merged archive created: {combined_path}")
+    return combined_path
+
 def main():
     args = parse_arguments()
 
@@ -175,8 +217,11 @@ def main():
         args.threads = get_optimal_thread_count()
     print(f"Using {args.threads} threads")
 
-    if not args.dir_save and len(args.dir) > 1:
-        print("Error: --dir_save must be specified when multiple directories are provided.")
+    if args.merge:
+        output_dir = args.dir_save
+        os.makedirs(output_dir, exist_ok=True)
+        merged_file = merge_split_archives(args.merge, output_dir)
+        print(f"Merged file created: {merged_file}")
         return
 
     output_dir = args.dir_save if args.dir_save else os.path.dirname(args.dir[0])
