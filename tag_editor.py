@@ -55,7 +55,7 @@ def process_file(file_path, save_dir, args, file_number):
         # content が None でないことを確認
         if content is None:
             print(f"Warning: {file_path} の内容が読み取れませんでした。スキップします。")
-            return
+            return None
 
         # Perform text manipulations based on arguments
         if args.del_first:
@@ -87,13 +87,11 @@ def process_file(file_path, save_dir, args, file_number):
             if match:
                 content = match.group(0)
         
-        save_path = os.path.join(save_dir, os.path.basename(file_path))
-        ensure_dir_exists(os.path.dirname(save_path))
-        with open(save_path, 'w', encoding='utf-8') as file:
-            file.write(content)
+        return content
 
     except Exception as e:
         print(f"Error processing file {file_path}: {e}")
+        return None
 
 def main():
     args = parse_arguments()
@@ -124,7 +122,11 @@ def main():
             with ThreadPoolExecutor(max_workers=args.threads) as executor:
                 futures = [executor.submit(process_file, file_path, args.save_dir, args, file_number) for file_number, file_path in enumerate(target_files, start=1)]
                 for future in futures:
-                    future.result()
+                    content = future.result()
+                    if content is not None:
+                        save_path = os.path.join(args.save_dir, os.path.basename(file_path))
+                        with open(save_path, 'w', encoding='utf-8') as file:
+                            file.write(content)
                     pbar.update(1)
     else:
         cache = {}
@@ -132,7 +134,9 @@ def main():
             with ThreadPoolExecutor(max_workers=args.threads) as executor:
                 futures = {executor.submit(process_file, file_path, args.save_dir, args, file_number): file_path for file_number, file_path in enumerate(target_files, start=1)}
                 for future in futures:
-                    cache[futures[future]] = future.result()
+                    content = future.result()
+                    if content is not None:
+                        cache[futures[future]] = content
                     pbar.update(1)
         for file_path, content in cache.items():
             save_path = os.path.join(args.save_dir, os.path.basename(file_path))
