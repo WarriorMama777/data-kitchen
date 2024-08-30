@@ -20,7 +20,6 @@ def setup_argument_parser():
     parser.add_argument('--debug', action='store_true', help='Enable debug mode')
     parser.add_argument('--cut', action='store_true', help='Cut files instead of copying')
     parser.add_argument('--copy', action='store_true', help='Copy files (default)')
-    parser.add_argument('--threshold', type=float, default=0, help='Threshold for text detection')
     parser.add_argument('--preserve_own_folder', action='store_true', help='Preserve own folder structure')
     parser.add_argument('--preserve_structure', action='store_true', help='Preserve directory structure')
     parser.add_argument('--Images_with_text_only', action='store_true', help='Extract only images containing text')
@@ -40,15 +39,11 @@ def create_directory(path):
 def get_optimal_thread_count():
     return max(1, os.cpu_count() - 1)
 
-def has_text_in_image(image_path, threshold):
+def has_text_in_image(image_path):
     try:
         with Image.open(image_path) as img:
             text = pytesseract.image_to_string(img)
-            if text.strip():
-                conf_data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
-                confidences = [float(conf) for conf in conf_data['conf'] if conf != '-1']
-                return confidences and sum(confidences) / len(confidences) > threshold * 100
-            return False
+            return bool(text.strip())
     except Exception as e:
         print(f"Error processing image {image_path}: {e}")
         return False
@@ -61,7 +56,7 @@ def process_file(args, root, file, tag_content=None):
         if ext.lower() not in ['.jpg', '.jpeg', '.png', '.webp']:
             return None
 
-        if args.Images_with_text_only and not has_text_in_image(file_path, args.threshold):
+        if args.Images_with_text_only and not has_text_in_image(file_path):
             return None
 
         if args.search_tag and tag_content and args.search_tag.lower() not in tag_content.lower():
