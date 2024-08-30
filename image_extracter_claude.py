@@ -5,7 +5,7 @@ import signal
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageFilter
 import pytesseract
 from tqdm import tqdm
 
@@ -25,6 +25,13 @@ def setup_argument_parser():
     parser.add_argument('--Images_with_text_only', action='store_true', help='Extract only images containing text')
     parser.add_argument('--threads', type=int, default=0, help='Number of threads to use (0 for auto)')
     parser.add_argument('--tesseract_path', help='Path to the Tesseract executable')
+    # 前処理やtesseract周り
+    parser.add_argument('--preprocess', action='store_true', help='Apply image preprocessing')
+    parser.add_argument('--enhance_contrast', type=float, default=1.0, help='Contrast enhancement factor')
+    parser.add_argument('--enhance_sharpness', type=float, default=1.0, help='Sharpness enhancement factor')
+    parser.add_argument('--tesseract_lang', default='eng', help='Tesseract language model (`jpn`, `eng+jpn` etc...). Need to get the model from tessdata.')
+    parser.add_argument('--tesseract_config', default='', help='Additional Tesseract configuration')
+    parser.add_argument('--min_confidence', type=float, default=0, help='Minimum confidence score for text detection')
     return parser
 
 def setup_signal_handler():
@@ -39,24 +46,59 @@ def create_directory(path):
 def get_optimal_thread_count():
     return max(1, os.cpu_count() - 1)
 
-def has_text_in_image(image_path):
+def preprocess_image(image, args):
+    if args.preprocess:
+        # コントラスト調整
+        enhancer = ImageEnhance.Contrast(image)
+        image = enhancer.enhance(args.enhance_contrast)
+        
+        # シャープネス調整
+        enhancer = ImageEnhance.Sharpness(image)
+        image = enhancer.enhance(args.enhance_sharpness)
+        
+        # ノイズ除去（オプション）
+        image = image.filter(ImageFilter.MedianFilter())
+        
+        # グレースケール変換
+        image = image.convert('L')
+        
+        # 二値化（オプション）
+        # image = image.point(lambda x: 0 if x < 128 else 255, '1')
+    
+    return image
+
+def has_text_in_image(image_path, args):
     try:
         with Image.open(image_path) as img:
-            text = pytesseract.image_to_string(img)
-            return bool(text.strip())
+            preprocessed_img = preprocess_image(img, args)
+            
+            # Tesseractの設定
+            custom_config = f'-l {args.tesseract_lang} {args.tesseract_config}'
+            
+            # 文字認識と信頼度スコアの取得
+            data = pytesseract.image_to_data(preprocessed_img, config=custom_config, output_type=pytesseract.Output.DICT)
+            
+            # 信頼度が閾値を超える文字がある場合にTrueを返す
+            confidences = [float(conf) for conf in data['conf'] if conf != '-1']
+            if args.debug:
+                print(f"Processed {image_path}: confidences = {confidences}")
+            return any(conf > args.min_confidence for conf in confidences)
     except Exception as e:
         print(f"Error processing image {image_path}: {e}")
+        if args.debug:
+            import traceback
+            traceback.print_exc()
         return False
 
 def process_file(args, root, file, tag_content=None):
     try:
         file_path = os.path.join(root, file)
         _, ext = os.path.splitext(file)
-        
+
         if ext.lower() not in ['.jpg', '.jpeg', '.png', '.webp']:
             return None
 
-        if args.Images_with_text_only and not has_text_in_image(file_path):
+        if args.Images_with_text_only and not has_text_in_image(file_path, args):
             return None
 
         if args.search_tag and tag_content and args.search_tag.lower() not in tag_content.lower():
@@ -99,6 +141,8 @@ def main():
 
     if args.tesseract_path:
         pytesseract.pytesseract.tesseract_cmd = args.tesseract_path
+    else:
+        print("Tesseract path is not set. Using default path.")
 
     setup_signal_handler()
 
