@@ -52,50 +52,16 @@ def copy_or_cut(src, dst, action):
     except Exception as e:
         logging.error(f"Error {action} file {src} to {dst}: {e}")
 
-# Main function to handle search_tag functionality
-def search_tag(search_word, dir_image, dir_tag, dir_save, extensions, recursive, action, debug, preserve_own_folder, preserve_structure):
+# Main function to handle Images_with_text_only functionality
+def images_with_text_only(dir_image, dir_tag, dir_save, action, debug, threshold, preserve_own_folder, preserve_structure):
     if preserve_own_folder:
         dir_save = Path(dir_save) / Path(dir_image).name
     create_directories(dir_save)
-    
+
     image_save_dir = Path(dir_save) / 'image'
     tag_save_dir = Path(dir_save) / 'tag'
     create_directories(image_save_dir)
     create_directories(tag_save_dir)
-
-    tag_files = find_files_with_extension(dir_tag, extensions, recursive)
-    matched_files = []
-
-    for tag_file in tqdm(tag_files, desc="Searching tags"):
-        try:
-            with open(tag_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-                if re.search(search_word, content, re.IGNORECASE):
-                    image_file = Path(dir_image) / tag_file.with_suffix('.jpg').name
-                    if image_file.exists():
-                        matched_files.append((tag_file, image_file))
-                        if debug:
-                            logging.debug(f"Matched: {tag_file} and {image_file}")
-        except Exception as e:
-            logging.error(f"Error reading file {tag_file}: {e}")
-
-    for tag_file, image_file in tqdm(matched_files, desc="Copying files"):
-        if preserve_structure:
-            relative_path = tag_file.relative_to(dir_tag)
-            copy_or_cut(tag_file, tag_save_dir / relative_path, action)
-            copy_or_cut(image_file, image_save_dir / relative_path.with_suffix('.jpg'), action)
-        else:
-            copy_or_cut(tag_file, tag_save_dir / tag_file.name, action)
-            copy_or_cut(image_file, image_save_dir / image_file.name, action)
-
-# Main function to handle Images_with_text_only functionality
-def images_with_text_only(dir_image, dir_save, action, debug, threshold, preserve_own_folder, preserve_structure):
-    if preserve_own_folder:
-        dir_save = Path(dir_save) / Path(dir_image).name
-    create_directories(dir_save)
-    
-    image_save_dir = Path(dir_save) / 'image'
-    create_directories(image_save_dir)
 
     image_files = find_files_with_extension(dir_image, ['jpg', 'jpeg', 'png', 'webp'], True)
     matched_files = []
@@ -106,15 +72,27 @@ def images_with_text_only(dir_image, dir_save, action, debug, threshold, preserv
             if debug:
                 logging.debug(f"Image with text: {image_file}")
 
-    for image_file in tqdm(matched_files, desc="Copying images"):
+    for image_file in tqdm(matched_files, desc="Copying images and tags"):
         if preserve_structure:
             relative_path = image_file.relative_to(dir_image)
-            copy_or_cut(image_file, image_save_dir / relative_path, action)
+            image_dst = image_save_dir / relative_path
+            copy_or_cut(image_file, image_dst, action)
+            
+            if dir_tag:
+                tag_file = Path(dir_tag) / relative_path.with_suffix('.txt')
+                if tag_file.exists():
+                    tag_dst = tag_save_dir / relative_path.with_suffix('.txt')
+                    copy_or_cut(tag_file, tag_dst, action)
         else:
             copy_or_cut(image_file, image_save_dir / image_file.name, action)
+            
+            if dir_tag:
+                tag_file = Path(dir_tag) / image_file.with_suffix('.txt').name
+                if tag_file.exists():
+                    copy_or_cut(tag_file, tag_save_dir / tag_file.name, action)
 
 def main():
-    parser = argparse.ArgumentParser(description="Image Extracter Tool")
+    parser = argparse.ArgumentParser(description="Image Extractor Tool")
     parser.add_argument('--search_tag', type=str, help='Search word for tags')
     parser.add_argument('--dir_image', type=str, required=True, help='Directory for image files')
     parser.add_argument('--dir_tag', type=str, help='Directory for tag text files')
@@ -140,8 +118,8 @@ def main():
     if not action:
         parser.error('Either --cut or --copy must be specified.')
 
-    if args.Images_with_text_only or not args.search_tag:
-        images_with_text_only(args.dir_image, args.dir_save, action, args.debug, args.threshold, args.preserve_own_folder, args.preserve_structure)
+    if args.Images_with_text_only:
+        images_with_text_only(args.dir_image, args.dir_tag, args.dir_save, action, args.debug, args.threshold, args.preserve_own_folder, args.preserve_structure)
     elif args.search_tag:
         search_tag(args.search_tag, args.dir_image, args.dir_tag, args.dir_save, args.extension, args.recursive, action, args.debug, args.preserve_own_folder, args.preserve_structure)
     else:
