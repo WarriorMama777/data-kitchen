@@ -11,3 +11,4 @@ imagehash
 huggingface_hub
 natsort
 aiofiles
+pytesseract
