@@ -42,6 +42,8 @@ def parse_arguments():
                         help="Use memory cache for converted files")
     parser.add_argument("--max_retries", type=int, default=3,
                         help="Maximum number of retries for failed conversions")
+    parser.add_argument("--by_folder", action="store_true",
+                        help="Process each folder in the specified directory separately")
     return parser.parse_args()
 
 def get_audio_files(directory, extensions, recursive):
@@ -61,11 +63,17 @@ def get_audio_files(directory, extensions, recursive):
 def create_output_directory(output_dir):
     os.makedirs(output_dir, exist_ok=True)
 
-def get_output_path(input_path, args):
-    rel_path = os.path.relpath(input_path, args.dir)
+def get_output_path(input_path, base_dir, args):
+    rel_path = os.path.relpath(input_path, base_dir)
     if args.preserve_own_folder:
-        rel_path = os.path.join(os.path.basename(args.dir), rel_path)
-    if not args.preserve_structure:
+        if args.by_folder:
+            # When using --by_folder, we need to include the parent directory name
+            parent_dir = os.path.basename(os.path.dirname(base_dir))
+            folder_name = os.path.basename(base_dir)
+            rel_path = os.path.join(parent_dir, folder_name, rel_path)
+        else:
+            rel_path = os.path.join(os.path.basename(base_dir), rel_path)
+    elif not args.preserve_structure:
         rel_path = os.path.basename(rel_path)
     output_path = os.path.join(args.dir_save, rel_path)
     output_dir = os.path.dirname(output_path)
@@ -80,8 +88,8 @@ def convert_audio(input_path, args):
     audio.export(buffer, format=args.format, bitrate=args.bitrate)
     return buffer.getvalue()
 
-def process_file(input_path, args):
-    output_path = get_output_path(input_path, args)
+def process_file(input_path, base_dir, args):
+    output_path = get_output_path(input_path, base_dir, args)
     if args.debug:
         logging.debug(f"Would convert {input_path} to {output_path}")
         return output_path, None
@@ -107,6 +115,31 @@ def save_converted_files(converted_files):
         else:
             logging.warning(f"Skipped saving file due to conversion failure: {output_path}")
 
+def process_directory(directory, args):
+    audio_files = get_audio_files(directory, args.extension, args.recursive)
+    converted_files = []
+
+    with ThreadPoolExecutor(max_workers=args.threads) as executor:
+        futures = [executor.submit(process_file, file, directory, args) for file in audio_files]
+        
+        with tqdm(total=len(audio_files), desc=f"Converting files in {directory}") as pbar:
+            for future in as_completed(futures):
+                pbar.update(1)
+                result = future.result()
+                if result[1] is not None or args.debug:
+                    converted_files.append(result)
+                else:
+                    logging.warning(f"Failed to convert a file")
+
+    if not args.debug:
+        if args.mem_cache:
+            logging.info(f"Saving all converted files from {directory}...")
+            save_converted_files(converted_files)
+        else:
+            logging.info(f"Files from {directory} have been saved during conversion")
+
+    logging.info(f"Conversion completed successfully for {directory}")
+
 def main():
     args = parse_arguments()
     setup_logging(args.debug)
@@ -114,30 +147,19 @@ def main():
     signal.signal(signal.SIGINT, lambda sig, frame: sys.exit(0))
 
     try:
-        audio_files = get_audio_files(args.dir, args.extension, args.recursive)
         create_output_directory(args.dir_save)
 
-        converted_files = []
-        with ThreadPoolExecutor(max_workers=args.threads) as executor:
-            futures = [executor.submit(process_file, file, args) for file in audio_files]
-            
-            with tqdm(total=len(audio_files), desc="Converting files") as pbar:
-                for future in as_completed(futures):
-                    pbar.update(1)
-                    result = future.result()
-                    if result[1] is not None or args.debug:
-                        converted_files.append(result)
-                    else:
-                        logging.warning(f"Failed to convert a file")
+        if args.by_folder and os.path.isdir(args.dir):
+            folders = [f.path for f in os.scandir(args.dir) if f.is_dir()]
+            if not folders:
+                folders = [args.dir]  # If no subdirectories, process the main directory
+            for folder in folders:
+                logging.info(f"Processing folder: {folder}")
+                process_directory(folder, args)
+        else:
+            process_directory(args.dir, args)
 
-        if not args.debug:
-            if args.mem_cache:
-                logging.info("Saving all converted files...")
-                save_converted_files(converted_files)
-            else:
-                logging.info("Files have been saved during conversion")
-
-        logging.info("Conversion completed successfully")
+        logging.info("All conversions completed successfully")
     except Exception as e:
         logging.error(f"An error occurred: {str(e)}")
         logging.debug(traceback.format_exc())
