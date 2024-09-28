@@ -3,7 +3,6 @@ import os
 import shutil
 import signal
 import sys
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from PIL import Image
 import pytesseract
@@ -25,6 +24,7 @@ def setup_argument_parser():
     parser.add_argument('--Images_with_text_only', action='store_true', help='Extract only images containing text')
     parser.add_argument('--threads', type=int, default=0, help='Number of threads to use (0 for auto)')
     parser.add_argument('--tesseract_path', help='Path to the Tesseract executable')
+    parser.add_argument('--tesseract_lang', help='Language code for Tesseract (e.g., jpn)')
     return parser
 
 def setup_signal_handler():
@@ -39,16 +39,16 @@ def create_directory(path):
 def get_optimal_thread_count():
     return max(1, os.cpu_count() - 1)
 
-def has_text_in_image(image_path):
+def has_text_in_image(image_path, lang=None):
     try:
         with Image.open(image_path) as img:
-            text = pytesseract.image_to_string(img)
+            text = pytesseract.image_to_string(img, lang=lang)
             return bool(text.strip())
     except Exception as e:
         print(f"Error processing image {image_path}: {e}")
         return False
 
-def process_file(args, root, file, tag_content=None):
+def process_file(args, root, file, tag_content=None, tesseract_lang=None):
     try:
         file_path = os.path.join(root, file)
         _, ext = os.path.splitext(file)
@@ -56,7 +56,7 @@ def process_file(args, root, file, tag_content=None):
         if ext.lower() not in ['.jpg', '.jpeg', '.png', '.webp']:
             return None
 
-        if args.Images_with_text_only and not has_text_in_image(file_path):
+        if args.Images_with_text_only and not has_text_in_image(file_path, lang=tesseract_lang):
             return None
 
         if args.search_tag and tag_content and args.search_tag.lower() not in tag_content.lower():
@@ -124,14 +124,14 @@ def main():
                     if os.path.exists(tag_file):
                         with open(tag_file, 'r', encoding='utf-8') as f:
                             tag_content = f.read()
-                files_to_process.append((root, file, tag_content))
+                files_to_process.append((root, file, tag_content, args.tesseract_lang))
 
         if not args.recursive:
             break
 
     processed_files = []
     with ThreadPoolExecutor(max_workers=args.threads) as executor:
-        futures = [executor.submit(process_file, args, root, file, tag_content) for root, file, tag_content in files_to_process]
+        futures = [executor.submit(process_file, args, root, file, tag_content, args.tesseract_lang) for root, file, tag_content, _ in files_to_process]
         for future in tqdm(as_completed(futures), total=len(futures), desc="Processing files"):
             result = future.result()
             if result:
