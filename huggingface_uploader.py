@@ -22,7 +22,7 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 # Function to upload files
-def upload_file(api, repo_id, filepath, repo_type, token, preserve_structure, preserve_own_folder, base_dir, debug, pbar, retries=5, backoff_factor=1):
+def upload_file(api, repo_id, filepath, repo_type, token, preserve_structure, preserve_own_folder, base_dir, debug, pbar, retries=10, backoff_factor=2):
     relative_path = os.path.relpath(filepath, base_dir) if preserve_structure else os.path.basename(filepath)
     if preserve_own_folder:
         repo_path = os.path.join(os.path.basename(base_dir), relative_path)
@@ -47,7 +47,7 @@ def upload_file(api, repo_id, filepath, repo_type, token, preserve_structure, pr
                 try:
                     api.upload_file(
                         path_or_fileobj=f,
-                        path_in_repo=repo_path.replace("\\", "/"),  # Replace backslashes with forward slashes
+                        path_in_repo=repo_path.replace("\\", "/"),
                         repo_id=repo_id,
                         repo_type=repo_type,
                         token=token,
@@ -55,9 +55,9 @@ def upload_file(api, repo_id, filepath, repo_type, token, preserve_structure, pr
                     )
                     break
                 except requests.exceptions.HTTPError as e:
-                    if e.response.status_code == 429:
+                    if e.response.status_code in [429, 504]:
                         wait_time = backoff_factor * (2 ** attempt)
-                        print(f"Rate limit exceeded. Retrying in {wait_time} seconds...")
+                        print(f"Rate limit exceeded or timeout. Retrying in {wait_time} seconds...")
                         time.sleep(wait_time)
                     else:
                         raise e
