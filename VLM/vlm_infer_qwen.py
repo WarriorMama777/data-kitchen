@@ -12,9 +12,13 @@ from qwen_vl_utils import process_vision_info
 import psutil
 import gc
 
+# グローバル変数で中断フラグを管理
+interrupt_flag = False
+
 def signal_handler(sig, frame):
-    print('\nプログラムを終了します。')
-    sys.exit(0)
+    global interrupt_flag
+    print('\nプログラムの中断を要求しました。現在のバッチの処理が完了次第、プログラムを終了します。')
+    interrupt_flag = True
 
 signal.signal(signal.SIGINT, signal_handler)
 
@@ -67,19 +71,44 @@ def process_image(image_path, model, processor, prompt, max_new_tokens, remove_n
 def process_batch(batch, model, processor, prompt, args):
     results = {}
     with ThreadPoolExecutor(max_workers=args.threads) as executor:
-        futures = []
-        for image_path in batch:
-            future = executor.submit(process_image, image_path, model, processor, prompt, args.max_new_tokens, args.remove_newlines)
-            futures.append(future)
-
+        futures = [executor.submit(process_image, image_path, model, processor, prompt, args.max_new_tokens, args.remove_newlines) for image_path in batch]
         for future in as_completed(futures):
+            if interrupt_flag:
+                executor.shutdown(wait=False)
+                break
             image_path, caption = future.result()
             if caption:
                 results[image_path] = caption
-
     return results
 
+def save_result(image_path, caption, args):
+    if os.path.isfile(args.dir_image):
+        # 入力が単一ファイルの場合
+        parent_dir = os.path.basename(os.path.dirname(args.dir_image))
+        rel_path = os.path.basename(image_path)
+    else:
+        # 入力がディレクトリの場合
+        parent_dir = os.path.basename(args.dir_image)
+        rel_path = os.path.relpath(image_path, args.dir_image)
+
+    if args.preserve_own_folder:
+        save_path = os.path.join(args.dir_save, parent_dir, rel_path)
+    else:
+        save_path = os.path.join(args.dir_save, rel_path)
+
+    if args.preserve_structure:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    else:
+        save_path = os.path.join(args.dir_save, parent_dir, os.path.basename(image_path))
+
+    txt_path = os.path.splitext(save_path)[0] + '.txt'
+    os.makedirs(os.path.dirname(txt_path), exist_ok=True)
+    with open(txt_path, 'w', encoding='utf-8') as f:
+        f.write(caption)
+
 def main(args):
+    global interrupt_flag
+
     if args.prompt.endswith('.txt'):
         with open(args.prompt, 'r', encoding='utf-8') as f:
             prompt = f.read().strip()
@@ -100,14 +129,18 @@ def main(args):
         image_files = [f for f in image_files if f.lower().endswith(supported_extensions)]
 
     batch_size = args.batch_size
-    results = {}
 
     with tqdm(total=len(image_files), desc="画像処理中") as pbar:
         for i in range(0, len(image_files), batch_size):
+            if interrupt_flag:
+                print("プログラムを中断します。")
+                break
+            
             batch = image_files[i:i+batch_size]
             try:
                 batch_results = process_batch(batch, model, processor, prompt, args)
-                results.update(batch_results)
+                for image_path, caption in batch_results.items():
+                    save_result(image_path, caption, args)
                 pbar.update(len(batch))
             except torch.cuda.OutOfMemoryError:
                 print(f"メモリ不足エラーが発生しました。バッチサイズを{batch_size//2}に縮小します。")
@@ -118,33 +151,10 @@ def main(args):
             torch.cuda.empty_cache()
             gc.collect()
 
-    save_results(results, args)
-
-def save_results(results, args):
-    for image_path, caption in results.items():
-        if os.path.isfile(args.dir_image):
-            # 入力が単一ファイルの場合
-            parent_dir = os.path.basename(os.path.dirname(args.dir_image))
-            rel_path = os.path.basename(image_path)
-        else:
-            # 入力がディレクトリの場合
-            parent_dir = os.path.basename(args.dir_image)
-            rel_path = os.path.relpath(image_path, args.dir_image)
-
-        if args.preserve_own_folder:
-            save_path = os.path.join(args.dir_save, parent_dir, rel_path)
-        else:
-            save_path = os.path.join(args.dir_save, rel_path)
-
-        if args.preserve_structure:
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        else:
-            save_path = os.path.join(args.dir_save, parent_dir, os.path.basename(image_path))
-
-        txt_path = os.path.splitext(save_path)[0] + '.txt'
-        os.makedirs(os.path.dirname(txt_path), exist_ok=True)
-        with open(txt_path, 'w', encoding='utf-8') as f:
-            f.write(caption)
+    if interrupt_flag:
+        print("プログラムは正常に中断されました。")
+    else:
+        print("すべての処理が完了しました。")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="QwenVLを使用した画像キャプション生成")
@@ -159,7 +169,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_new_tokens", type=int, default=50, help="生成するキャプションの最大トークン数")
     parser.add_argument("--threads", type=int, default=get_optimal_thread_count(), help="使用するスレッド数")
     parser.add_argument("--remove_newlines", action="store_true", help="出力テキストの改行を削除するか")
-    parser.add_argument("--batch_size", type=int, default=1, help="一度に処理する画像の数")
+    parser.add_argument("--batch_size", type=int, default=4, help="一度に処理する画像の数")
 
     args = parser.parse_args()
     main(args)
