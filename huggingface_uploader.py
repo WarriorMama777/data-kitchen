@@ -22,7 +22,7 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 # Function to upload files
-def upload_file(api, repo_id, filepath, repo_type, token, preserve_structure, preserve_own_folder, base_dir, debug, pbar, retries=10, backoff_factor=2):
+def upload_file(api, repo_id, filepath, repo_type, token, preserve_structure, preserve_own_folder, base_dir, debug, pbar, upload_interval, retries=10, backoff_factor=5):
     relative_path = os.path.relpath(filepath, base_dir) if preserve_structure else os.path.basename(filepath)
     if preserve_own_folder:
         repo_path = os.path.join(os.path.basename(base_dir), relative_path)
@@ -62,9 +62,10 @@ def upload_file(api, repo_id, filepath, repo_type, token, preserve_structure, pr
                     else:
                         raise e
     pbar.update(1)
+    time.sleep(upload_interval + (backoff_factor * (attempt + 1)))
 
 # Function to process directories
-def process_directory(api, repo_id, base_dir, extensions, repo_type, token, recursive, preserve_structure, preserve_own_folder, by_file, debug, threads):
+def process_directory(api, repo_id, base_dir, extensions, repo_type, token, recursive, preserve_structure, preserve_own_folder, by_file, debug, threads, upload_interval):
     file_paths = []
     for root, _, files in os.walk(base_dir):
         for file in files:
@@ -74,13 +75,17 @@ def process_directory(api, repo_id, base_dir, extensions, repo_type, token, recu
             break
 
     with tqdm(total=len(file_paths), desc="Uploading files") as pbar:
-        with ThreadPoolExecutor(max_workers=threads) as executor:
-            futures = []
+        if by_file:
             for file_path in file_paths:
-                futures.append(executor.submit(upload_file, api, repo_id, file_path, repo_type, token, preserve_structure, preserve_own_folder, base_dir, debug, pbar))
+                upload_file(api, repo_id, file_path, repo_type, token, preserve_structure, preserve_own_folder, base_dir, debug, pbar, upload_interval)
+        else:
+            with ThreadPoolExecutor(max_workers=threads) as executor:
+                futures = []
+                for file_path in file_paths:
+                    futures.append(executor.submit(upload_file, api, repo_id, file_path, repo_type, token, preserve_structure, preserve_own_folder, base_dir, debug, pbar, upload_interval))
 
-            for future in as_completed(futures):
-                future.result()
+                for future in as_completed(futures):
+                    future.result()
 
 # Function to create repository if not exists
 def create_repo(api, repo_id, repo_type, token, private):
@@ -107,6 +112,7 @@ def main():
     parser.add_argument("--private", action="store_true", help="Create private repository if not exists")
     parser.add_argument("--token", required=True, help="User access token")
     parser.add_argument("--threads", type=int, default=os.cpu_count(), help="Number of threads to use")
+    parser.add_argument("--upload_interval", type=float, default=1.0, help="Interval between uploads in seconds")
 
     args = parser.parse_args()
 
@@ -117,10 +123,10 @@ def main():
 
     for path in args.dir:
         if os.path.isdir(path):
-            process_directory(api, args.repo_id, path, args.extension, args.repo_type, token, args.recursive, args.preserve_structure, args.preserve_own_folder, args.by_file, args.debug, args.threads)
+            process_directory(api, args.repo_id, path, args.extension, args.repo_type, token, args.recursive, args.preserve_structure, args.preserve_own_folder, args.by_file, args.debug, args.threads, args.upload_interval)
         elif os.path.isfile(path):
             with tqdm(total=1, desc="Uploading file") as pbar:
-                upload_file(api, args.repo_id, path, args.repo_type, token, args.preserve_structure, args.preserve_own_folder, os.path.dirname(path), args.debug, pbar)
+                upload_file(api, args.repo_id, path, args.repo_type, token, args.preserve_structure, args.preserve_own_folder, os.path.dirname(path), args.debug, pbar, args.upload_interval)
         else:
             print(f"Path {path} does not exist.")
 

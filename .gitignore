@@ -1,5 +1,6 @@
 venv/
 venv2/
+venv-torch/
 # example/
 test/
 gallery-dl/
