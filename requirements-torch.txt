@@ -19,3 +19,6 @@ accelerate
 qwen_vl_utils
 optimum
 optimum[gptq]
+tensorflow
+onnx
+onnxruntime
