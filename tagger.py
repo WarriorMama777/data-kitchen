@@ -186,8 +186,10 @@ def process_images(args, model, input_name, rating_tags, general_tags, character
                 rating_index = prob[:4].argmax()
                 found_rating = rating_tags[rating_index]
                 if found_rating not in args.undesired_tags:
-                    tag_freq[found_rating] = tag_freq.get(found_rating, 0) + 1
-                    combined_tags.insert(0, found_rating) if args.use_rating_tags else combined_tags.append(found_rating)
+                    # プレフィックスを追加
+                    prefixed_rating = f"rating_{found_rating}"
+                    tag_freq[prefixed_rating] = tag_freq.get(prefixed_rating, 0) + 1
+                    combined_tags.insert(0, prefixed_rating) if args.use_rating_tags else combined_tags.append(prefixed_rating)
 
             if args.always_first_tags:
                 for tag in reversed(args.always_first_tags):
