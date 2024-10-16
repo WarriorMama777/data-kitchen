@@ -25,6 +25,20 @@ signal.signal(signal.SIGINT, signal_handler)
 def get_optimal_thread_count():
     return psutil.cpu_count(logical=False)
 
+def load_model_and_processor(model_name):
+    try:
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
+            model_name,
+            torch_dtype=torch.float16,
+            device_map="auto",
+            trust_remote_code=True
+        )
+        processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
+        return model, processor
+    except Exception as e:
+        print(f"モデルのロード中にエラーが発生しました: {str(e)}")
+        raise
+
 def process_image(image_path, model, processor, prompt, max_new_tokens, remove_newlines):
     try:
         messages = [
@@ -51,7 +65,23 @@ def process_image(image_path, model, processor, prompt, max_new_tokens, remove_n
         inputs = inputs.to(model.device)
 
         with torch.no_grad():
-            generated_ids = model.generate(**inputs, max_new_tokens=max_new_tokens)
+            try:
+                generated_ids = model.generate(
+                    **inputs,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=True,
+                    top_k=50,
+                    top_p=0.95,
+                    num_return_sequences=1,
+                    temperature=0.7,
+                    repetition_penalty=1.2,
+                    no_repeat_ngram_size=3,
+                    early_stopping=True
+                )
+            except RuntimeError as e:
+                print(f"警告: {image_path} の処理中にエラーが発生しました: {str(e)}")
+                return image_path, "画像の説明を生成できませんでした。"
+
         generated_ids_trimmed = [
             out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
         ]
@@ -115,10 +145,11 @@ def main(args):
     else:
         prompt = args.prompt
 
-    model = Qwen2VLForConditionalGeneration.from_pretrained(
-        args.model, torch_dtype="auto", device_map="auto"
-    )
-    processor = AutoProcessor.from_pretrained(args.model)
+    try:
+        model, processor = load_model_and_processor(args.model)
+    except Exception as e:
+        print(f"モデルのロードに失敗しました: {str(e)}")
+        return
 
     supported_extensions = tuple(f'.{ext.lower()}' for ext in args.extension)
     if os.path.isfile(args.dir_image):
