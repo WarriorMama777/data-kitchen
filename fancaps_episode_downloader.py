@@ -2,6 +2,8 @@ import argparse
 import os
 import re
 import requests
+import time
+import random
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -22,6 +24,19 @@ class UrlSupport:
 
 # エピソードクローラークラスの定義
 class EpisodeCrawler:
+    def __init__(self):
+        self.session = requests.Session()
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Referer': 'https://fancaps.net/',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Cache-Control': 'max-age=0',
+        }
+
     def crawl(self, url):
         pic_links = []
         current_url = url
@@ -43,7 +58,10 @@ class EpisodeCrawler:
 
         while current_url:
             try:
-                response = requests.get(current_url, headers={'User-Agent': 'Mozilla/5.0'})
+                # リクエスト間に遅延を追加（ウェブサイトに負荷をかけないため）
+                time.sleep(random.uniform(1.0, 3.0))
+                
+                response = self.session.get(current_url, headers=self.headers)
                 response.raise_for_status()
             except requests.exceptions.RequestException as e:
                 print(f"リクエストエラー: {e}")
@@ -98,9 +116,25 @@ class Crawler:
 
 # ダウンローダークラスの定義
 class Downloader:
+    def __init__(self):
+        self.session = requests.Session()
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Referer': 'https://fancaps.net/',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Cache-Control': 'max-age=0',
+        }
+
     def downloadUrl(self, path, url):
         try:
-            response = requests.get(url, stream=True)
+            # リクエスト間に遅延を追加（ウェブサイトに負荷をかけないため）
+            time.sleep(random.uniform(0.5, 2.0))
+            
+            response = self.session.get(url, headers=self.headers, stream=True)
             response.raise_for_status()
             file_name = os.path.basename(url)
             with open(os.path.join(path, file_name), 'wb') as file:
@@ -111,7 +145,8 @@ class Downloader:
 
     def downloadUrls(self, path, urls):
         os.makedirs(path, exist_ok=True)
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        # 同時接続数を減らして負荷を軽減
+        with ThreadPoolExecutor(max_workers=3) as executor:
             future_to_url = {executor.submit(self.downloadUrl, path, url): url for url in urls}
             for future in tqdm(as_completed(future_to_url), total=len(urls)):
                 future.result()
